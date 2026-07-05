@@ -12,7 +12,7 @@ from typing import Optional, Dict
 from datetime import datetime, timezone
 
 from questions import CATEGORIES, QUESTIONS
-from image_questions import IMAGE_QUESTIONS
+from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 
 ROOT_DIR = Path(__file__).parent
@@ -69,14 +69,22 @@ def can_attack(game, attacker_id, target_r, target_c):
     return False
 
 
-def get_random_question(category_id):
-    # 30% chance to pick an image question if available for this category
+def get_random_question(category_id, custom_questions=None):
+    # If host added custom questions for this category, mix them in
     imgs = IMAGE_QUESTIONS.get(category_id, [])
-    if imgs and random.random() < 0.3:
+    quotes = QUOTE_QUESTIONS.get(category_id, [])
+    customs = (custom_questions or {}).get(category_id, [])
+    # 25% image if available
+    if imgs and random.random() < 0.25:
         return random.choice(imgs)
+    # 15% quote if available
+    if quotes and random.random() < 0.15:
+        return random.choice(quotes)
+    # 20% custom if available
+    if customs and random.random() < 0.20:
+        return random.choice(customs)
     qs = QUESTIONS.get(category_id, [])
     if not qs:
-        # fallback to image if only imgs exist
         if imgs:
             return random.choice(imgs)
         return None
@@ -212,6 +220,15 @@ class NextTurnReq(BaseModel):
     host_token: str
 
 
+class CustomQuestionReq(BaseModel):
+    code: str
+    host_token: str
+    category_id: str
+    q: str
+    opts: list
+    a: int
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Arena Game API"}
@@ -254,6 +271,7 @@ async def create_room(req: CreateRoomReq):
         "sudden_death": False,
         "last_action": None,
         "pending_action": None,
+        "custom_questions": {},
     }
     return {"code": code, "host_token": host_token}
 
@@ -309,6 +327,13 @@ async def get_state(code: str, token: Optional[str] = None):
     if game.get("duel") and not game["duel"].get("resolved"):
         if now_ms() - game["duel"]["started_at"] > DUEL_TIMEOUT_MS:
             resolve_duel_if_ready(game)
+    # auto-advance turn after duel review grace period
+    if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
+        if now_ms() > game["pending_action"]["until"]:
+            game["duel"] = None
+            game["pending_action"] = None
+            if game["state"] != "finished":
+                next_turn(game)
     g = public_game(game)
     if token:
         me_full = next((p for p in game["players"] if p["token"] == token), None)
@@ -378,7 +403,7 @@ async def attack(req: AttackReq):
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         category = defender["category_id"]
-    question = get_random_question(category)
+    question = get_random_question(category, game.get("custom_questions"))
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     game["duel"] = {
@@ -521,7 +546,7 @@ async def use_powerup(req: PowerUpReq):
     if pu == "skip":
         if not d or d.get("resolved"):
             raise HTTPException(400, "استخدم أثناء المبارزة")
-        d["question"] = get_random_question(d["category"])
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"))
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None
@@ -573,6 +598,22 @@ async def next_turn_ep(req: NextTurnReq):
     return {"ok": True}
 
 
+@api_router.post("/rooms/custom_question")
+async def add_custom_question(req: CustomQuestionReq):
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    if game["host_token"] != req.host_token:
+        raise HTTPException(403)
+    if game["state"] != "lobby":
+        raise HTTPException(400, "يمكن الإضافة قبل بدء المباراة فقط")
+    if len(req.opts) != 4 or req.a < 0 or req.a > 3 or not req.q.strip():
+        raise HTTPException(400, "سؤال غير صالح")
+    game["custom_questions"].setdefault(req.category_id, []).append({"q": req.q, "opts": req.opts, "a": req.a})
+    total = sum(len(v) for v in game["custom_questions"].values())
+    return {"ok": True, "total_custom": total}
+
+
 @api_router.post("/rooms/tick")
 async def tick(code: str):
     game = GAMES.get(code)
@@ -581,7 +622,7 @@ async def tick(code: str):
     if game.get("duel") and not game["duel"].get("resolved"):
         if now_ms() - game["duel"]["started_at"] > DUEL_TIMEOUT_MS:
             resolve_duel_if_ready(game)
-    # auto-clear duel review after grace period
+    # auto-clear duel review after grace period AND auto-advance turn
     if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
         if now_ms() > game["pending_action"]["until"]:
             game["duel"] = None

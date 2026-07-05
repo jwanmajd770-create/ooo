@@ -16,6 +16,13 @@ export default function Home() {
 
   useEffect(() => {
     api.categories().then((r) => setCategories(r.categories)).catch(() => {});
+    // Auto-open join mode if ?join=XXXXXX in URL
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get("join");
+    if (joinCode && /^\d{6}$/.test(joinCode)) {
+      setPin(joinCode);
+      setMode("join");
+    }
   }, []);
 
   const createRoom = async () => {

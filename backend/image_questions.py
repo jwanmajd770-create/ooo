@@ -1,6 +1,4 @@
 # Image-based questions using free Wikimedia Commons URLs.
-# Each question: {"q": text, "opts": [4], "a": index, "img": url}
-
 IMAGE_QUESTIONS = {
     "capitals": [
         {"q": "أي مدينة معلمها الشهير هذا؟", "opts": ["باريس", "لندن", "روما", "برلين"], "a": 0,
@@ -15,6 +13,30 @@ IMAGE_QUESTIONS = {
          "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Taj_Mahal_%28Edited%29.jpeg/320px-Taj_Mahal_%28Edited%29.jpeg"},
         {"q": "أي مدينة يقع فيها الكولوسيوم؟", "opts": ["أثينا", "روما", "إسطنبول", "الإسكندرية"], "a": 1,
          "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Colosseo_2020.jpg/320px-Colosseo_2020.jpg"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["السعودية", "الإمارات", "العراق", "الأردن"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Flag_of_Saudi_Arabia.svg/320px-Flag_of_Saudi_Arabia.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["الإمارات", "الكويت", "البحرين", "قطر"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cb/Flag_of_the_United_Arab_Emirates.svg/320px-Flag_of_the_United_Arab_Emirates.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["فرنسا", "إيطاليا", "ألمانيا", "بلجيكا"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Flag_of_France.svg/320px-Flag_of_France.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["اليابان", "الصين", "كوريا الجنوبية", "فيتنام"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Flag_of_Japan.svg/320px-Flag_of_Japan.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["البرازيل", "الأرجنتين", "كولومبيا", "بيرو"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Flag_of_Brazil.svg/320px-Flag_of_Brazil.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["مصر", "السودان", "سوريا", "اليمن"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Flag_of_Egypt.svg/320px-Flag_of_Egypt.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["كندا", "أمريكا", "أستراليا", "بريطانيا"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cf/Flag_of_Canada.svg/320px-Flag_of_Canada.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["تركيا", "تونس", "الجزائر", "المغرب"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Flag_of_Turkey.svg/320px-Flag_of_Turkey.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["ألمانيا", "بلجيكا", "روسيا", "هولندا"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/ba/Flag_of_Germany.svg/320px-Flag_of_Germany.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["إسبانيا", "البرتغال", "إيطاليا", "المكسيك"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Flag_of_Spain.svg/320px-Flag_of_Spain.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["المغرب", "تونس", "الجزائر", "ليبيا"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Flag_of_Morocco.svg/320px-Flag_of_Morocco.svg.png"},
+        {"q": "لأي دولة هذا العلم؟", "opts": ["الأردن", "فلسطين", "الكويت", "السودان"], "a": 0,
+         "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Flag_of_Jordan.svg/320px-Flag_of_Jordan.svg.png"},
     ],
     "celebs": [
         {"q": "من هذه المطربة العربية؟", "opts": ["فيروز", "أم كلثوم", "وردة", "أسمهان"], "a": 1,
@@ -43,7 +65,27 @@ IMAGE_QUESTIONS = {
     "geography": [
         {"q": "أي جبل هذا؟", "opts": ["كليمنجارو", "إفرست", "K2", "مونت بلانك"], "a": 1,
          "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/Everest_from_Kalapatthar.jpg/320px-Everest_from_Kalapatthar.jpg"},
-        {"q": "أي محيط أو بحر هذا الشاطئ؟", "opts": ["البحر الأحمر", "المحيط الهادي", "المتوسط", "البحر الميت"], "a": 3,
+        {"q": "أي بحر هذا الشاطئ؟", "opts": ["البحر الأحمر", "المحيط الهادي", "المتوسط", "البحر الميت"], "a": 3,
          "img": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Dead_sea_newspaper.jpg/320px-Dead_sea_newspaper.jpg"},
+    ],
+}
+
+# Quote completion / famous line questions per category
+QUOTE_QUESTIONS = {
+    "literature": [
+        {"q": "أكمل: 'الخيل والليل والبيداء تعرفني ...'", "opts": ["والسيف والرمح والقرطاس والقلم", "والدرع والخنجر والسهم والوتر", "والقلب والحرف والقافية والألم", "والعز والمجد والإقدام والهمم"], "a": 0},
+        {"q": "أكمل قصيدة: 'إذا الشعب يوماً أراد الحياة ...'", "opts": ["فلا بد أن يستجيب القدر", "فلا يقعدنّ به الكسل", "فمن يقو دون سلاح يفز", "فقد كتب النصر لمن صبر"], "a": 0},
+        {"q": "من قال: 'أنا الغريق فما خوفي من البلل'؟", "opts": ["المتنبي", "أبو العلاء المعري", "أحمد شوقي", "نزار قباني"], "a": 1},
+        {"q": "أكمل: 'وما نيل المطالب بالتمني ...'", "opts": ["ولكن تؤخذ الدنيا غلابا", "ولكنّ الأماني ضلال", "ولكن بجدّ في الطلاب", "ولكنه بالحلم يستدرك"], "a": 0},
+    ],
+    "quran": [
+        {"q": "أكمل: 'وما خلقت الجن والإنس ...'", "opts": ["إلا ليعبدون", "إلا ليعمروا", "إلا ليعرفون", "إلا ليشكرون"], "a": 0},
+        {"q": "أكمل: 'إن مع العسر ...'", "opts": ["فرجاً", "يسراً", "راحة", "مخرجاً"], "a": 1},
+        {"q": "أكمل: 'ولا تقنطوا من رحمة الله ...'", "opts": ["إن الله غفور رحيم", "إن الله يغفر الذنوب جميعاً", "إن الله على كل شيء قدير", "إن رحمة الله قريب من المحسنين"], "a": 1},
+        {"q": "أكمل: 'واعتصموا بحبل الله جميعاً ...'", "opts": ["ولا تفرقوا", "وكونوا عباد الله إخوانا", "واذكروا نعمة الله عليكم", "ولا تنازعوا"], "a": 0},
+    ],
+    "celebs": [
+        {"q": "من قال: 'أعطني قلماً أعطيك شعباً واعياً'؟", "opts": ["جمال عبد الناصر", "طه حسين", "أحمد لطفي السيد", "أحمد شوقي"], "a": 3},
+        {"q": "من قال: 'أنا أفكر إذاً أنا موجود'؟", "opts": ["أفلاطون", "أرسطو", "ديكارت", "سقراط"], "a": 2},
     ],
 }

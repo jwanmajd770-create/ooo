@@ -35,6 +35,8 @@ export const api = {
         target_col,
       })
       .then((r) => r.data),
+  custom: (code, host_token, category_id, q, opts, a) =>
+    axios.post(`${API}/rooms/custom_question`, { code, host_token, category_id, q, opts, a }).then((r) => r.data),
   nextTurn: (code, host_token) =>
     axios.post(`${API}/rooms/next_turn`, { code, host_token }).then((r) => r.data),
   tick: (code) => axios.post(`${API}/rooms/tick?code=${code}`).then((r) => r.data),

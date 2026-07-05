@@ -1,0 +1,24 @@
+{
+  "summary": "Backend testing for Arabic Arena new features (custom questions, image flags, quote questions, auto-advance). All backend behaviors verified against public URL.",
+  "tested_scope": ["backend"],
+  "passed": [
+    "POST /api/rooms/custom_question in lobby returns {ok:true,total_custom:1}",
+    "POST /api/rooms/custom_question rejects wrong host_token (403)",
+    "POST /api/rooms/custom_question rejects opts length != 4 (400)",
+    "POST /api/rooms/custom_question rejects a out of 0-3 range (400)",
+    "POST /api/rooms/custom_question rejects empty/whitespace q (400)",
+    "POST /api/rooms/custom_question rejects when game state != lobby (400)",
+    "POST /api/rooms/custom_question 404 for non-existent room",
+    "image_questions.capitals contains 18 items (>=18 required), 16 flag-type questions",
+    "QUOTE_QUESTIONS covers literature (4), quran (4), celebs (2)",
+    "GET /api/categories returns 20 categories",
+    "Auto-advance via POST /api/rooms/tick: clears duel + pending_action + calls next_turn after pending_action.until",
+    "Auto-advance in GET /api/rooms/{code}/state also clears duel & advances turn without needing tick",
+    "Full flow: create -> join(2) -> start -> attack -> answer -> resolve works end-to-end"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (deferred per request)"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

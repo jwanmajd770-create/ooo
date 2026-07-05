@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import GameGrid from "../components/GameGrid";
 import DuelModal from "../components/DuelModal";
 import Leaderboard from "../components/Leaderboard";
+import CustomQuestionForm from "../components/CustomQuestionForm";
 import { toast } from "sonner";
 import { Copy, PlayCircle, SkipForward, Trophy } from "lucide-react";
 
@@ -12,7 +13,7 @@ export default function HostRoom() {
   const { code } = useParams();
   const nav = useNavigate();
   const hostToken = localStorage.getItem(`host_${code}`);
-  const { state, error } = useGameState(code, hostToken, 1000);
+  const { state, error } = useGameState(code, hostToken, 700);
 
   useEffect(() => {
     if (!hostToken) nav("/");
@@ -43,6 +44,12 @@ export default function HostRoom() {
     toast.success("تم النسخ");
   };
 
+  const copyLink = () => {
+    const link = `${window.location.origin}/?join=${code}`;
+    navigator.clipboard.writeText(link);
+    toast.success("رابط الدعوة نُسخ! شاركه على واتساب");
+  };
+
   const shields = {};
   state.players.forEach((p) => { if (p.shield_on) shields[p.id] = p.shield_on; });
 
@@ -55,6 +62,7 @@ export default function HostRoom() {
             <div className="flex items-center gap-3">
               <h1 className="text-4xl font-black tabular neon-cyan" data-testid="host-pin">{code}</h1>
               <button onClick={copyPin} className="p-2 rounded-lg bg-white/5 hover:bg-white/10" data-testid="btn-copy-pin"><Copy className="w-4 h-4" /></button>
+              <button onClick={copyLink} className="px-3 py-2 rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs font-bold" data-testid="btn-copy-link">📱 نسخ رابط الدعوة</button>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
@@ -89,6 +97,9 @@ export default function HostRoom() {
                 </div>
               ))}
               {state.players.length === 0 && <div className="text-gray-500 col-span-full text-center p-6">لم ينضم أحد بعد...</div>}
+            </div>
+            <div className="mt-4">
+              <CustomQuestionForm code={code} hostToken={hostToken} />
             </div>
           </div>
         )}

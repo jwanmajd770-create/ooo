@@ -15,7 +15,7 @@ export default function PlayerRoom() {
   const raw = localStorage.getItem(`player_${code}`);
   const info = raw ? JSON.parse(raw) : null;
   const token = info?.token;
-  const { state, error } = useGameState(code, token, 900);
+  const { state, error } = useGameState(code, token, 600);
   const [shieldMode, setShieldMode] = useState(false);
   const [eyeHint, setEyeHint] = useState(null);
 
