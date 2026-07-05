@@ -1,0 +1,16 @@
+{
+  "summary": "Verified duel image fix: all 18 flagcdn.com URLs return HTTP 200 with content-type image/png. No unsplash/wikimedia URLs remain in backend. GET /api/rooms/{code}/state correctly serves duel.question.img field with valid flagcdn URLs during image duels (confirmed via live game session with 3 image duels observed).",
+  "tested_scope": ["backend", "integration"],
+  "passed": [
+    "All 18 flagcdn.com/w320/{cc}.png URLs return HTTP 200 with content-type image/png (sa, ae, fr, jp, br, eg, ca, tr, de, es, ma, jo, it, gb, kw, qa, lb, us)",
+    "grep -rn 'unsplash|wikimedia' /app/backend/ returned zero matches",
+    "POST /api/rooms/create, /join, /start, /attack work correctly and trigger duels",
+    "GET /api/rooms/{code}/state returns duel.question.img with valid flagcdn URL (e.g. https://flagcdn.com/w320/us.png) during image duels",
+    "Non-image (text) capitals questions also served correctly (e.g. 'عاصمة البرازيل؟')"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
