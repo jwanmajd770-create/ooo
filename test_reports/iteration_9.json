@@ -1,0 +1,25 @@
+{
+  "summary": "Re-verified /rooms/attack in flags_only mode after backend restart. Sampled 30 duels via full end-to-end flow (create room -> join 2 players -> start -> attack loop). All 30/30 duel questions contained flag images (either 'img' or 'opts_img' field), and 100% of URLs pointed to flagcdn.com. Fix confirmed working.",
+  "tested_scope": ["backend"],
+  "passed": [
+    "POST /rooms/create with mode=flags_only",
+    "POST /rooms/join (2 players)",
+    "POST /rooms/start",
+    "POST /rooms/attack returns duel with flag-image question 30/30 times",
+    "100% questions have img OR opts_img field populated",
+    "100% image URLs are from flagcdn.com (w320 for single, w160 for opts)",
+    "Category forced to 'capitals' in flags_only mode as expected"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "sample_evidence": {
+    "total_samples": 30,
+    "with_img_or_opts_img": 30,
+    "with_flagcdn_urls": 30,
+    "example_img": "https://flagcdn.com/w320/kz.png",
+    "example_opts_img": ["https://flagcdn.com/w160/so.png", "https://flagcdn.com/w160/cl.png", "https://flagcdn.com/w160/af.png", "https://flagcdn.com/w160/qa.png"]
+  }
+}

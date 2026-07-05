@@ -412,7 +412,7 @@ async def attack(req: AttackReq):
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
-    question = get_random_question(category, game.get("custom_questions"))
+    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
