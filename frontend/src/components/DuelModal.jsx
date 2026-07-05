@@ -205,6 +205,30 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
           </div>
         )}
 
+        {/* Pass button for stored-clock duels: visible only to active player on their turn */}
+        {duel && duel.turn && myRole && duel.turn === myRole && !showResult && (
+          <div className="flex justify-center mt-3">
+            <button
+              data-testid="duel-pass"
+              disabled={busy}
+              onClick={async () => {
+                if (busy) return;
+                setBusy(true);
+                try {
+                  await onPass();
+                } catch (e) {
+                  // onPass already shows toast on error in PlayerRoom; still catch
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold hover:bg-red-500 disabled:opacity-40"
+            >
+              تجاوز (-3 ثوان)
+            </button>
+          </div>
+        )}
+
         {alreadyAnswered && !showResult && (
           <div className="text-center text-gray-400 text-sm">أرسلت إجابتك. بانتظار الخصم...</div>
         )}
