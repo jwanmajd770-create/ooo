@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, Dict
 from datetime import datetime, timezone
+import time
 
 from questions import CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
@@ -18,9 +19,14 @@ from stats import save_game_result, get_hall_of_fame, get_recent_games
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# Make mongo client optional so tests can import server without env
+mongo_url = os.environ.get('MONGO_URL')
+if mongo_url:
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get('DB_NAME', 'test_db')]
+else:
+    client = None
+    db = None
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -30,6 +36,7 @@ GAMES: Dict[str, dict] = {}
 GRID_SIZE = 6
 DUEL_TIMEOUT_MS = 12000
 FAST_DUEL_TIMEOUT_MS = 6000
+FLOOR_DUEL_INIT_TIME = 30.0  # seconds per player in stored-clock duel
 MAX_SPECTATORS = 100
 ROOM_TTL_MS = 6 * 60 * 60 * 1000        # any room dies after 6h
 FINISHED_TTL_MS = 20 * 60 * 1000        # finished rooms die after 20min
@@ -78,6 +85,72 @@ def find_free_cell(game):
 
 def player_cells(game, pid):
     return [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE) if game["grid"][r][c] == pid]
+
+
+def effective_remaining(d, role):
+    """Return remaining seconds for role ('attacker' or 'defender')."""
+    key = f"{role}_stored_time"
+    stored = d.get(key, FLOOR_DUEL_INIT_TIME)
+    # only the active turn is ticking
+    if d.get("turn") == role:
+        elapsed = time.time() - d.get("turn_start_ts", time.time())
+        return max(0.0, stored - elapsed)
+    return float(stored)
+
+
+def check_stored_clock_sudden_death(game):
+    d = game.get("duel")
+    if not d or d.get("resolved"):
+        return False
+    active = d.get("turn")
+    if active not in ("attacker", "defender"):
+        return False
+    rem = effective_remaining(d, active)
+    if rem <= 0:
+        # active player lost by timeout
+        loser_id = d["attacker_id"] if active == "attacker" else d.get("defender_id")
+        winner_id = d.get("defender_id") if active == "attacker" else d["attacker_id"]
+        d["resolved"] = True
+        d["winner_id"] = winner_id
+        tr, tc = d["target"]
+        if winner_id == d["attacker_id"]:
+            game["grid"][tr][tc] = d["attacker_id"]
+            attacker = next(p for p in game["players"] if p["id"] == d["attacker_id"])
+            attacker["wins"] += 1
+            if attacker["wins"] % 3 == 0:
+                keys = list(attacker["powerups"].keys())
+                random.shuffle(keys)
+                for k in keys:
+                    if attacker["powerups"][k] < 2:
+                        attacker["powerups"][k] += 1
+                        break
+            if d.get("defender_id"):
+                eliminate_check(game, d["defender_id"])
+        game["last_action"] = {
+            "type": "duel_resolved",
+            "winner_id": winner_id,
+            "attacker_correct": None,
+            "defender_correct": None,
+            "correct_idx": None,
+            "target": d["target"],
+        }
+        game["state"] = "active"
+        alive = [p for p in game["players"] if not p["eliminated"]]
+        if len(alive) <= 3 and not game.get("sudden_death"):
+            game["sudden_death"] = True
+        if len(alive) <= 1:
+            game["state"] = "finished"
+            game["winner"] = alive[0]["id"] if alive else None
+            if not game.get("_stats_saved"):
+                game["_stats_saved"] = True
+                import asyncio
+                try:
+                    asyncio.create_task(save_game_result(db, game))
+                except Exception:
+                    pass
+        game["pending_action"] = {"type": "duel_review", "until": int(time.time() * 1000) + 3800}
+        return True
+    return False
 
 
 def can_attack(game, attacker_id, target_r, target_c):
@@ -165,7 +238,7 @@ def public_game(game):
     }
     if game.get("duel"):
         d = game["duel"]
-        active_timeout = d.get("timeout_ms", DUEL_TIMEOUT_MS)
+        # expose duel in stored-clock format
         if d.get("resolved"):
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
@@ -173,30 +246,28 @@ def public_game(game):
                 "target": d["target"],
                 "category": d["category"],
                 "question": d["question"],
-                "started_at": d["started_at"],
                 "resolved": True,
-                "attacker_answer": d.get("attacker_answer"),
-                "defender_answer": d.get("defender_answer"),
                 "winner_id": d.get("winner_id"),
-                "timeout_ms": active_timeout,
             }
         else:
             q_pub = {"q": d["question"]["q"], "opts": d["question"]["opts"]}
             if d["question"].get("img"):
                 q_pub["img"] = d["question"]["img"]
             if d["question"].get("opts_img"):
-                q_pub["opts_img"] = d["question"]["opts_img"]
+                q_pub["opts_img"] = d["question"].get("opts_img")
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
                 "defender_id": d.get("defender_id"),
                 "target": d["target"],
                 "category": d["category"],
                 "question": q_pub,
-                "started_at": d["started_at"],
+                "turn": d.get("turn"),
+                "turn_start_ts": d.get("turn_start_ts"),
+                "attacker_stored_time": d.get("attacker_stored_time"),
+                "defender_stored_time": d.get("defender_stored_time"),
                 "resolved": False,
                 "attacker_answered": d.get("attacker_answer") is not None,
                 "defender_answered": d.get("defender_answer") is not None,
-                "timeout_ms": active_timeout,
             }
     return g
 
@@ -255,6 +326,11 @@ class CustomQuestionReq(BaseModel):
     q: str
     opts: list
     a: int
+
+
+class DuelPassReq(BaseModel):
+    code: str
+    player_token: str
 
 
 @api_router.get("/")
@@ -357,10 +433,15 @@ async def get_state(code: str, token: Optional[str] = None):
     game = GAMES.get(code)
     if not game:
         raise HTTPException(404, "الغرفة غير موجودة")
-    # auto-resolve duel on timeout (respect per-duel timeout, e.g. fast mode)
+    # auto-resolve duel on timeout or stored-clock sudden death
     if game.get("duel") and not game["duel"].get("resolved"):
-        if now_ms() - game["duel"]["started_at"] > game["duel"].get("timeout_ms", DUEL_TIMEOUT_MS):
-            resolve_duel_if_ready(game)
+        d = game["duel"]
+        # stored-clock duel uses 'turn' field
+        if d.get("turn"):
+            check_stored_clock_sudden_death(game)
+        else:
+            if now_ms() - d["started_at"] > d.get("timeout_ms", DUEL_TIMEOUT_MS):
+                resolve_duel_if_ready(game)
     # auto-advance turn after duel review grace period
     if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
         if now_ms() > game["pending_action"]["until"]:
@@ -444,21 +525,44 @@ async def attack(req: AttackReq):
     question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
-    timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
+    # If attacking an empty cell, keep the legacy single-question flow
+    if defender_id is None:
+        timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
+        game["duel"] = {
+            "attacker_id": me["id"],
+            "defender_id": defender_id,
+            "target": [req.row, req.col],
+            "category": category,
+            "question": question,
+            "started_at": now_ms(),
+            "attacker_answer": None,
+            "defender_answer": None,
+            "attacker_time": None,
+            "defender_time": None,
+            "resolved": False,
+            "winner_id": None,
+            "timeout_ms": timeout,
+        }
+        game["state"] = "duel"
+        touch(game)
+        return {"ok": True}
+
+    # For occupied cells start stored-clock rapid duel (The Floor)
+    now_ts = time.time()
     game["duel"] = {
         "attacker_id": me["id"],
         "defender_id": defender_id,
         "target": [req.row, req.col],
         "category": category,
         "question": question,
-        "started_at": now_ms(),
+        "turn": "attacker",
+        "turn_start_ts": now_ts,
+        "attacker_stored_time": FLOOR_DUEL_INIT_TIME,
+        "defender_stored_time": FLOOR_DUEL_INIT_TIME,
         "attacker_answer": None,
         "defender_answer": None,
-        "attacker_time": None,
-        "defender_time": None,
         "resolved": False,
         "winner_id": None,
-        "timeout_ms": timeout,
     }
     game["state"] = "duel"
     touch(game)
@@ -555,6 +659,47 @@ async def answer(req: AnswerReq):
     me = next((p for p in game["players"] if p["token"] == req.player_token), None)
     if not me:
         raise HTTPException(403)
+    # Stored-clock duel flow
+    if d.get("turn"):
+        # check sudden death first
+        check_stored_clock_sudden_death(game)
+        if d.get("resolved"):
+            raise HTTPException(400, "انتهت المبارزة")
+        role = None
+        if me["id"] == d["attacker_id"]:
+            role = "attacker"
+        elif me["id"] == d.get("defender_id"):
+            role = "defender"
+        else:
+            raise HTTPException(400, "لست جزءاً من هذه المبارزة")
+        # only active player may answer
+        if d.get("turn") != role:
+            raise HTTPException(400, "ليس دورك")
+        now_ts = time.time()
+        elapsed = now_ts - d.get("turn_start_ts", now_ts)
+        remaining_before = max(0.0, d.get(f"{role}_stored_time", FLOOR_DUEL_INIT_TIME) - elapsed)
+        if remaining_before <= 0:
+            # they lost by timeout
+            check_stored_clock_sudden_death(game)
+            raise HTTPException(400, "انتهى الوقت")
+        correct_idx = d["question"]["a"]
+        if req.answer_idx == correct_idx:
+            # save remaining and switch turn
+            d[f"{role}_stored_time"] = remaining_before
+            # switch to opponent
+            opp = "defender" if role == "attacker" else "attacker"
+            d["turn"] = opp
+            d["turn_start_ts"] = now_ts
+            # serve next question instantly
+            d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+            touch(game)
+            return {"ok": True, "correct": True}
+        else:
+            # wrong answer, keep same question and continue timing
+            touch(game)
+            return {"ok": True, "correct": False}
+
+    # legacy single-question duel flow
     elapsed = now_ms() - d["started_at"]
     if elapsed > d.get("timeout_ms", DUEL_TIMEOUT_MS):
         resolve_duel_if_ready(game)
@@ -570,6 +715,41 @@ async def answer(req: AnswerReq):
     resolve_duel_if_ready(game)
     touch(game)
     return {"ok": True}
+
+
+@api_router.post("/rooms/duel_pass")
+async def duel_pass(req: DuelPassReq):
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    me = next((p for p in game["players"] if p["token"] == req.player_token), None)
+    if not me:
+        raise HTTPException(403)
+    d = game.get("duel")
+    if not d or d.get("resolved") or not d.get("turn"):
+        raise HTTPException(400, "لا توجد مبارزة سارية قابلة للتمرير")
+    # only active player may pass
+    role = "attacker" if me["id"] == d["attacker_id"] else "defender" if me["id"] == d.get("defender_id") else None
+    if role is None:
+        raise HTTPException(400, "لست جزءاً من هذه المبارزة")
+    if d.get("turn") != role:
+        raise HTTPException(400, "ليس دورك")
+    now_ts = time.time()
+    elapsed = now_ts - d.get("turn_start_ts", now_ts)
+    remaining = max(0.0, d.get(f"{role}_stored_time", FLOOR_DUEL_INIT_TIME) - elapsed - 3.0)
+    d[f"{role}_stored_time"] = remaining
+    # check sudden death
+    if remaining <= 0:
+        check_stored_clock_sudden_death(game)
+        touch(game)
+        return {"ok": True, "passed": True, "sudden_death": True}
+    # switch turn to opponent and serve new question
+    opp = "defender" if role == "attacker" else "attacker"
+    d["turn"] = opp
+    d["turn_start_ts"] = now_ts
+    d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+    touch(game)
+    return {"ok": True, "passed": True}
 
 
 @api_router.post("/rooms/powerup")
@@ -592,21 +772,39 @@ async def use_powerup(req: PowerUpReq):
         if not in_duel():
             raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
         # prevent abuse: can't skip after the opponent already answered
-        opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
-        if opp_answer is not None:
-            raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
-        d["attacker_answer"] = None
-        d["defender_answer"] = None
-        d["attacker_time"] = None
-        d["defender_time"] = None
-        d["started_at"] = now_ms()
-        d["eye_hints"] = {}  # new question -> old hints invalid
-        me["powerups"][pu] -= 1
+        # If stored-clock duel, allow skip only if opponent hasn't just answered (we track answers per-question)
+        if d.get("turn"):
+            opp = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
+            if opp is not None:
+                raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
+            d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+            d["attacker_answer"] = None
+            d["defender_answer"] = None
+            d["eye_hints"] = {}
+            # keep turn and turn_start_ts (question changed instantly)
+            d["turn_start_ts"] = time.time()
+            me["powerups"][pu] -= 1
+        else:
+            opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
+            if opp_answer is not None:
+                raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
+            d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+            d["attacker_answer"] = None
+            d["defender_answer"] = None
+            d["attacker_time"] = None
+            d["defender_time"] = None
+            d["started_at"] = now_ms()
+            d["eye_hints"] = {}  # new question -> old hints invalid
+            me["powerups"][pu] -= 1
     elif pu == "time":
         if not in_duel():
             raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
-        d["started_at"] += 5000
+        if d.get("turn"):
+            # add 5 seconds to this player's stored time
+            role = "attacker" if me["id"] == d["attacker_id"] else "defender"
+            d[f"{role}_stored_time"] = d.get(f"{role}_stored_time", FLOOR_DUEL_INIT_TIME) + 5.0
+        else:
+            d["started_at"] += 5000
         me["powerups"][pu] -= 1
     elif pu == "eye":
         # give a hint - remove one wrong option (visible only to this player)
@@ -672,8 +870,12 @@ async def tick(code: str):
     if not game:
         raise HTTPException(404)
     if game.get("duel") and not game["duel"].get("resolved"):
-        if now_ms() - game["duel"]["started_at"] > game["duel"].get("timeout_ms", DUEL_TIMEOUT_MS):
-            resolve_duel_if_ready(game)
+        d = game["duel"]
+        if d.get("turn"):
+            check_stored_clock_sudden_death(game)
+        else:
+            if now_ms() - d["started_at"] > d.get("timeout_ms", DUEL_TIMEOUT_MS):
+                resolve_duel_if_ready(game)
     # auto-clear duel review after grace period AND auto-advance turn
     if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
         if now_ms() > game["pending_action"]["until"]:
