@@ -4,7 +4,6 @@
   "private": true,
   "dependencies": {
     "@hookform/resolvers": "5.0.1",
-    "ajv": "^8.12.0",
     "@radix-ui/react-accordion": "1.2.8",
     "@radix-ui/react-alert-dialog": "1.1.11",
     "@radix-ui/react-aspect-ratio": "1.1.4",
@@ -142,6 +141,11 @@
   },
  "packageManager": "yarn@1.22.22...",
   "overrides": {
-    "ajv": "^8.12.0"
+    "ajv": "^8.12.0",
+    "ajv-keywords": "^5.1.0",
+    "fork-ts-checker-webpack-plugin": {
+      "ajv": "^8.12.0",
+      "ajv-keywords": "^5.1.0"
+    }
   }
 }
