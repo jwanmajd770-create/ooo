@@ -1,0 +1,87 @@
+{
+  "theme": "Dark",
+  "archetype": "7 (Electric & Neon) - TV Studio Game Show",
+  "language": "Arabic (RTL)",
+  "typography": {
+    "fonts": {
+      "heading": "Cairo, sans-serif",
+      "body": "Tajawal, sans-serif"
+    },
+    "hierarchy": {
+      "h1": "text-4xl md:text-5xl lg:text-6xl font-black tracking-tight",
+      "h2": "text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight",
+      "h3": "text-xl md:text-2xl font-bold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-gray-400"
+    }
+  },
+  "colors": {
+    "background": {
+      "base": "#050508",
+      "surface": "#0F0F15",
+      "overlay": "rgba(5, 5, 8, 0.85)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "muted": "#52525B"
+    },
+    "accents": {
+      "neon_cyan": "#00F0FF",
+      "hot_pink": "#FF007F",
+      "laser_green": "#39FF14",
+      "electric_yellow": "#FFFF00",
+      "blaze_orange": "#FF4500",
+      "danger_red": "#FF3B30",
+      "host_purple": "#9D4CDD"
+    }
+  },
+  "layout": {
+    "direction": "rtl",
+    "core_structure": "Mobile-first. Use CSS Grid for the 6x6 map. Leaderboard and spectator feed slide out or stack on mobile, side-by-side on desktop.",
+    "spacing_scale": "p-2, p-4, p-6. Generous spacing between sections, very tight spacing inside the 6x6 grid."
+  },
+  "components": {
+    "game_grid": {
+      "wrapper": "grid grid-cols-6 gap-1 md:gap-2 w-full max-w-3xl mx-auto aspect-square p-2 bg-[#0F0F15] rounded-xl border border-white/5",
+      "cell_base": "aspect-square rounded-md md:rounded-lg flex items-center justify-center text-xs md:text-sm font-bold transition-all cursor-pointer relative overflow-hidden",
+      "cell_empty": "bg-[#1A1A24] text-[#52525B] hover:bg-[#252532] border border-white/5",
+      "cell_owned": "bg-opacity-20 border-2 shadow-[0_0_10px_rgba(var(--color),0.5)] text-white"
+    },
+    "duel_screen": {
+      "container": "fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-xl p-4",
+      "timer": "text-7xl md:text-9xl font-black tabular-nums tracking-tighter animate-pulse text-white",
+      "timer_danger": "text-danger_red",
+      "question_card": "w-full max-w-2xl bg-[#0F0F15] border border-white/10 p-6 md:p-12 rounded-2xl shadow-2xl mt-8",
+      "answer_button": "w-full p-4 rounded-xl text-lg font-bold bg-[#1A1A24] border border-white/10 hover:bg-white/10 hover:border-white/30 transition-all text-right"
+    },
+    "power_ups_bar": {
+      "container": "flex gap-3 bg-[#0F0F15]/80 backdrop-blur-md p-3 rounded-2xl border border-white/10",
+      "icon_button": "w-12 h-12 rounded-xl flex flex-col items-center justify-center bg-white/5 hover:bg-white/15 text-white/70 hover:text-white transition-all shadow-lg text-[10px] gap-1"
+    },
+    "dashboard_host": {
+      "layout": "Control center grid. 'Swiss & High-Contrast' functional layout using dark gray cards. Real-time controls for starting game, kicking players, and triggering sudden death.",
+      "card": "bg-[#0F0F15] border border-white/10 p-6 rounded-xl"
+    }
+  },
+  "motion": {
+    "micro_interactions": "Hover states scale up by 1.05. Active states scale down to 0.95.",
+    "transitions": "Use Tailwind 'transition-all duration-300 ease-in-out'",
+    "animations": {
+      "pulse_glow": "animate-pulse for active territory being challenged."
+    }
+  },
+  "assets": {
+    "icon_library": "lucide-react",
+    "image_urls": {}
+  },
+  "guidelines_for_agent": [
+    "1. RTL Layout is CRITICAL. The entire app MUST use dir='rtl' in HTML tag. Use logical properties like 'ms-' instead of 'ml-', 'pe-' instead of 'pr-'.",
+    "2. Language: The UI copy must be completely in Arabic. Avoid LTR English text.",
+    "3. Typography: Add Google Fonts link in index.html for 'Cairo' (headings) and 'Tajawal' (body text). Configure them in tailwind.config.js.",
+    "4. Component Logic: Use raw Tailwind for the main 6x6 grid and duel overlay. Use Shadcn UI for standard forms, dialogs, and setup screens.",
+    "5. Testing: Ensure every button, grid cell, and input has a unique `data-testid` (e.g., `data-testid='cell-0-0'`, `data-testid='powerup-skip'`).",
+    "6. Styling: No pure black backgrounds for cards; use dark grays (#0F0F15) with subtle 1px white/10 borders to create depth.",
+    "7. Grid Interaction: The 6x6 grid must fit entirely within the viewport height to avoid scrolling during intense gameplay. Use aspect-square and max-h-[60vh] logic."
+  ]
+}
