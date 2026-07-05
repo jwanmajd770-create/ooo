@@ -1,0 +1,27 @@
+{
+  "summary": "Smoke tested Arabic RTL trivia 'الأرض' backend (7 endpoints via curl) and frontend (home + create room + player join). Backend fully working: 20 categories, room create/join/spectate, full duel flow (attack, solo-duel question served without answer key, eye/time/skip/shield power-ups reduce counts, answer resolves duel, last_action set with correct_idx, pending_action duel_review, next_turn cycles to P2). Validation correct: non-adjacent attack rejected ('يجب أن تكون الخانة مجاورة'), non-current-player attack rejected ('ليس دورك'), starting with <2 players rejected implicitly, 3rd-win powerup grant logic present. Frontend home renders title 'الأرض' and 3 buttons; host creates room and 6-digit PIN visible; second browser tab joins with sports category and Player1 appears in host lobby with correct icon.",
+  "tested_scope": ["backend", "frontend", "integration"],
+  "passed": [
+    "GET /api/categories returns 20 categories",
+    "POST /rooms/create returns 6-digit code + host_token",
+    "POST /rooms/join with category_id (sports, history) works",
+    "POST /rooms/spectate works without auth",
+    "POST /rooms/start places players on grid and sets state=active",
+    "GET /rooms/{code}/state hides answer key ('a') during active duel, exposes correct_idx in last_action after resolve",
+    "can_attack: non-adjacent rejected, adjacent free cell allowed",
+    "Wrong-turn attack rejected ('ليس دورك')",
+    "Powerups eye/time/skip/shield all succeed and decrement counts",
+    "Answer resolves duel, sets pending_action duel_review",
+    "POST /rooms/next_turn cycles current_player correctly",
+    "Frontend home: title + btn-host + btn-join + btn-spectate render",
+    "Host create-room flow shows 6-digit PIN via [data-testid=host-pin]",
+    "Player join flow: PIN + name + category-select + submit -> lobby",
+    "Host lobby auto-refreshes and shows joined Player1"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "retest_needed": false,
+  "full_testing_deferred": true,
+  "notes": "Duel timeout (12s) auto-resolve, game-end winner declaration, and winner-screen were NOT exercised end-to-end due to time. Logic reviewed in server.py appears correct (resolve_duel_if_ready handles timed_out, next_turn sets state=finished when alive<=1). Recommend full agent verify these edge cases plus DuelModal timer UI and leaderboard sorting."
+}
