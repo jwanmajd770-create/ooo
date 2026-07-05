@@ -23,10 +23,16 @@ export default function PlayerRoom() {
     if (!info) nav("/");
   }, [info, nav]);
 
-  // reset eye hint when duel changes
+  // clear eye hint when duel/question changes (new duel, or skip = new started_at)
   useEffect(() => {
-    if (!state?.duel) setEyeHint(null);
+    setEyeHint(null);
   }, [state?.duel?.started_at]);
+
+  // restore eye hint from server (survives page refresh)
+  useEffect(() => {
+    const serverHint = state?.me?.eye_hint;
+    if (serverHint !== undefined && serverHint !== null) setEyeHint(serverHint);
+  }, [state?.me?.eye_hint]);
 
   // play win sound on victory
   useEffect(() => {

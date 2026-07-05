@@ -30,6 +30,26 @@ GAMES: Dict[str, dict] = {}
 GRID_SIZE = 6
 DUEL_TIMEOUT_MS = 12000
 FAST_DUEL_TIMEOUT_MS = 6000
+MAX_SPECTATORS = 100
+ROOM_TTL_MS = 6 * 60 * 60 * 1000        # any room dies after 6h
+FINISHED_TTL_MS = 20 * 60 * 1000        # finished rooms die after 20min
+IDLE_TTL_MS = 2 * 60 * 60 * 1000        # no activity for 2h -> die
+
+
+def cleanup_rooms():
+    now = now_ms()
+    dead = []
+    for code, g in GAMES.items():
+        age = now - g.get("created_at", now)
+        idle = now - g.get("last_activity", g.get("created_at", now))
+        if age > ROOM_TTL_MS or idle > IDLE_TTL_MS or (g.get("state") == "finished" and idle > FINISHED_TTL_MS):
+            dead.append(code)
+    for code in dead:
+        GAMES.pop(code, None)
+
+
+def touch(game):
+    game["last_activity"] = now_ms()
 POWERUP_COLORS = ["#00F0FF", "#FF007F", "#39FF14", "#FFFF00", "#FF4500", "#9D4CDD", "#FF3B30", "#00BFFF", "#FF69B4", "#ADFF2F", "#FFA500", "#DA70D6"]
 
 
@@ -140,7 +160,7 @@ def public_game(game):
         "duel": None,
         "last_action": game.get("last_action"),
         "sudden_death": game.get("sudden_death", False),
-        "duel_timeout_ms": DUEL_TIMEOUT_MS,
+        "duel_timeout_ms": FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS,
         "mode": game.get("mode", "classic"),
     }
     if game.get("duel"):
@@ -259,6 +279,7 @@ async def stats_recent(limit: int = 10):
 
 @api_router.post("/rooms/create")
 async def create_room(req: CreateRoomReq):
+    cleanup_rooms()
     code = gen_pin()
     while code in GAMES:
         code = gen_pin()
@@ -275,6 +296,7 @@ async def create_room(req: CreateRoomReq):
         "turn_idx": 0,
         "duel": None,
         "created_at": now_ms(),
+        "last_activity": now_ms(),
         "winner": None,
         "sudden_death": False,
         "last_action": None,
@@ -314,6 +336,7 @@ async def join_room(req: JoinReq):
         "shield_on": None,
     }
     game["players"].append(player)
+    touch(game)
     return {"player_id": pid, "token": token, "color": color}
 
 
@@ -322,6 +345,8 @@ async def spectate(req: SpectateReq):
     game = GAMES.get(req.code)
     if not game:
         raise HTTPException(404, "الغرفة غير موجودة")
+    if len(game.get("spectators", [])) >= MAX_SPECTATORS:
+        raise HTTPException(400, "وصلت الغرفة للحد الأقصى من المشاهدين")
     sid = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     game["spectators"].append({"id": sid, "name": req.name, "joined_at": now_ms()})
     return {"spectator_id": sid}
@@ -332,9 +357,9 @@ async def get_state(code: str, token: Optional[str] = None):
     game = GAMES.get(code)
     if not game:
         raise HTTPException(404, "الغرفة غير موجودة")
-    # auto-resolve duel on timeout
+    # auto-resolve duel on timeout (respect per-duel timeout, e.g. fast mode)
     if game.get("duel") and not game["duel"].get("resolved"):
-        if now_ms() - game["duel"]["started_at"] > DUEL_TIMEOUT_MS:
+        if now_ms() - game["duel"]["started_at"] > game["duel"].get("timeout_ms", DUEL_TIMEOUT_MS):
             resolve_duel_if_ready(game)
     # auto-advance turn after duel review grace period
     if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
@@ -357,6 +382,9 @@ async def get_state(code: str, token: Optional[str] = None):
                 "eliminated": me_full["eliminated"],
                 "shield_on": me_full.get("shield_on"),
             }
+            d = game.get("duel")
+            if d and not d.get("resolved"):
+                g["me"]["eye_hint"] = d.get("eye_hints", {}).get(me_full["id"])
         elif token == game["host_token"]:
             g["is_host"] = True
     return g
@@ -378,6 +406,7 @@ async def start_game(req: StartGameReq):
     game["state"] = "active"
     game["turn_idx"] = -1
     next_turn(game)
+    touch(game)
     return {"ok": True}
 
 
@@ -432,6 +461,7 @@ async def attack(req: AttackReq):
         "timeout_ms": timeout,
     }
     game["state"] = "duel"
+    touch(game)
     return {"ok": True}
 
 
@@ -526,7 +556,7 @@ async def answer(req: AnswerReq):
     if not me:
         raise HTTPException(403)
     elapsed = now_ms() - d["started_at"]
-    if elapsed > DUEL_TIMEOUT_MS:
+    if elapsed > d.get("timeout_ms", DUEL_TIMEOUT_MS):
         resolve_duel_if_ready(game)
         raise HTTPException(400, "انتهى الوقت")
     if me["id"] == d["attacker_id"] and d.get("attacker_answer") is None:
@@ -538,6 +568,7 @@ async def answer(req: AnswerReq):
     else:
         raise HTTPException(400, "لست جزءاً من هذه المبارزة أو أجبت مسبقاً")
     resolve_duel_if_ready(game)
+    touch(game)
     return {"ok": True}
 
 
@@ -554,26 +585,36 @@ async def use_powerup(req: PowerUpReq):
         raise HTTPException(400, "لا تملك هذه القدرة")
     d = game.get("duel")
 
+    def in_duel():
+        return d and not d.get("resolved") and me["id"] in (d["attacker_id"], d.get("defender_id"))
+
     if pu == "skip":
-        if not d or d.get("resolved"):
-            raise HTTPException(400, "استخدم أثناء المبارزة")
+        if not in_duel():
+            raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
+        # prevent abuse: can't skip after the opponent already answered
+        opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
+        if opp_answer is not None:
+            raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
         d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None
         d["defender_time"] = None
         d["started_at"] = now_ms()
+        d["eye_hints"] = {}  # new question -> old hints invalid
         me["powerups"][pu] -= 1
     elif pu == "time":
-        if not d or d.get("resolved"):
-            raise HTTPException(400)
+        if not in_duel():
+            raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
         d["started_at"] += 5000
         me["powerups"][pu] -= 1
     elif pu == "eye":
-        # give a hint - remove one wrong option (marked in response only for this player)
-        if not d or d.get("resolved"):
-            raise HTTPException(400)
+        # give a hint - remove one wrong option (visible only to this player)
+        if not in_duel():
+            raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
         d.setdefault("eye_hints", {})
+        if me["id"] in d["eye_hints"]:
+            return {"ok": True, "eye_hint": d["eye_hints"][me["id"]]}
         wrong_idxs = [i for i in range(len(d["question"]["opts"])) if i != d["question"]["a"]]
         random.shuffle(wrong_idxs)
         d["eye_hints"][me["id"]] = wrong_idxs[0]
@@ -631,7 +672,7 @@ async def tick(code: str):
     if not game:
         raise HTTPException(404)
     if game.get("duel") and not game["duel"].get("resolved"):
-        if now_ms() - game["duel"]["started_at"] > DUEL_TIMEOUT_MS:
+        if now_ms() - game["duel"]["started_at"] > game["duel"].get("timeout_ms", DUEL_TIMEOUT_MS):
             resolve_duel_if_ready(game)
     # auto-clear duel review after grace period AND auto-advance turn
     if game.get("pending_action") and game["pending_action"].get("type") == "duel_review":
