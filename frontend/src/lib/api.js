@@ -5,8 +5,8 @@ export const API = `${BACKEND_URL}/api`;
 
 export const api = {
   categories: () => axios.get(`${API}/categories`).then((r) => r.data),
-  createRoom: (host_name) =>
-    axios.post(`${API}/rooms/create`, { host_name }).then((r) => r.data),
+  createRoom: (host_name, mode) =>
+    axios.post(`${API}/rooms/create`, { host_name, mode: mode || "classic" }).then((r) => r.data),
   join: (code, name, category_id) =>
     axios.post(`${API}/rooms/join`, { code, name, category_id }).then((r) => r.data),
   spectate: (code, name) =>

@@ -29,6 +29,7 @@ GAMES: Dict[str, dict] = {}
 
 GRID_SIZE = 6
 DUEL_TIMEOUT_MS = 12000
+FAST_DUEL_TIMEOUT_MS = 6000
 POWERUP_COLORS = ["#00F0FF", "#FF007F", "#39FF14", "#FFFF00", "#FF4500", "#9D4CDD", "#FF3B30", "#00BFFF", "#FF69B4", "#ADFF2F", "#FFA500", "#DA70D6"]
 
 
@@ -140,9 +141,11 @@ def public_game(game):
         "last_action": game.get("last_action"),
         "sudden_death": game.get("sudden_death", False),
         "duel_timeout_ms": DUEL_TIMEOUT_MS,
+        "mode": game.get("mode", "classic"),
     }
     if game.get("duel"):
         d = game["duel"]
+        active_timeout = d.get("timeout_ms", DUEL_TIMEOUT_MS)
         if d.get("resolved"):
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
@@ -155,6 +158,7 @@ def public_game(game):
                 "attacker_answer": d.get("attacker_answer"),
                 "defender_answer": d.get("defender_answer"),
                 "winner_id": d.get("winner_id"),
+                "timeout_ms": active_timeout,
             }
         else:
             q_pub = {"q": d["question"]["q"], "opts": d["question"]["opts"]}
@@ -172,12 +176,14 @@ def public_game(game):
                 "resolved": False,
                 "attacker_answered": d.get("attacker_answer") is not None,
                 "defender_answered": d.get("defender_answer") is not None,
+                "timeout_ms": active_timeout,
             }
     return g
 
 
 class CreateRoomReq(BaseModel):
     host_name: str = "المقدم"
+    mode: str = "classic"  # classic | flags_only
 
 
 class JoinReq(BaseModel):
@@ -274,6 +280,7 @@ async def create_room(req: CreateRoomReq):
         "last_action": None,
         "pending_action": None,
         "custom_questions": {},
+        "mode": req.mode,
     }
     return {"code": code, "host_token": host_token}
 
@@ -400,14 +407,15 @@ async def attack(req: AttackReq):
             return {"ok": True, "blocked": True}
     if target_owner is None:
         defender_id = None
-        category = me["category_id"]
+        category = "capitals" if game.get("mode") == "flags_only" else me["category_id"]
     else:
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
-        category = defender["category_id"]
+        category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
     question = get_random_question(category, game.get("custom_questions"))
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
+    timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
     game["duel"] = {
         "attacker_id": me["id"],
         "defender_id": defender_id,
@@ -421,6 +429,7 @@ async def attack(req: AttackReq):
         "defender_time": None,
         "resolved": False,
         "winner_id": None,
+        "timeout_ms": timeout,
     }
     game["state"] = "duel"
     return {"ok": True}
@@ -433,7 +442,7 @@ def resolve_duel_if_ready(game):
     solo = d["defender_id"] is None
     now = now_ms()
     elapsed = now - d["started_at"]
-    timed_out = elapsed >= DUEL_TIMEOUT_MS
+    timed_out = elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
     a_ans = d.get("attacker_answer")
     de_ans = d.get("defender_answer")
     if solo:

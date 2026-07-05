@@ -13,6 +13,7 @@ export default function Home() {
   const [selCat, setSelCat] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hostName, setHostName] = useState("المقدم");
+  const [gameMode, setGameMode] = useState("classic");
 
   useEffect(() => {
     api.categories().then((r) => setCategories(r.categories)).catch(() => {});
@@ -28,7 +29,7 @@ export default function Home() {
   const createRoom = async () => {
     setLoading(true);
     try {
-      const r = await api.createRoom(hostName || "المقدم");
+      const r = await api.createRoom(hostName || "المقدم", gameMode);
       localStorage.setItem(`host_${r.code}`, r.host_token);
       nav(`/host/${r.code}`);
     } catch (e) {
@@ -144,6 +145,17 @@ export default function Home() {
               placeholder="اسم المقدم"
               className="w-full p-3 rounded-lg bg-black/50 border border-white/10 mb-4 text-white"
             />
+            <label className="block text-sm mb-2 text-gray-400">وضع اللعب:</label>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button data-testid="mode-classic" onClick={() => setGameMode("classic")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "classic" ? "border-cyan-400 bg-cyan-400/10" : "border-white/10 bg-white/5"}`}>
+                <div className="font-bold">🎯 كلاسيكي</div>
+                <div className="text-xs text-gray-400">كل الفئات · 12 ثانية</div>
+              </button>
+              <button data-testid="mode-flags" onClick={() => setGameMode("flags_only")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "flags_only" ? "border-yellow-400 bg-yellow-400/10" : "border-white/10 bg-white/5"}`}>
+                <div className="font-bold">🚩 بطولة الأعلام</div>
+                <div className="text-xs text-gray-400">أعلام فقط · 6 ثواني ⚡</div>
+              </button>
+            </div>
             <div className="flex gap-2">
               <button data-testid="btn-create-room" disabled={loading} onClick={createRoom} className="flex-1 p-3 rounded-lg bg-cyan-400 text-black font-bold hover:bg-cyan-300 transition-all disabled:opacity-50">
                 {loading ? "..." : "أنشئ الغرفة"}

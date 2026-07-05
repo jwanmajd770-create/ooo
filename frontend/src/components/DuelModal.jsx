@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { sfx } from "../lib/sfx";
 
 export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000 }) {
-  const [remaining, setRemaining] = useState(duelTimeoutMs / 1000);
+  const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
+  const [remaining, setRemaining] = useState(effectiveTimeout / 1000);
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
   const lastTickSec = useRef(null);
@@ -51,7 +52,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       }
     }, 100);
     return () => clearInterval(iv);
-  }, [duel, duelTimeoutMs]);
+  }, [duel, effectiveTimeout]);
 
   if (!duel) return null;
   const attacker = players.find((p) => p.id === duel.attacker_id);

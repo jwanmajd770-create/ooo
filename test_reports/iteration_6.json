@@ -1,0 +1,27 @@
+{
+  "summary": "Backend verification of Flag Tournament mode. Verified: create room accepts mode field, state returns mode, flags_only forces category=capitals and timeout_ms=6000, classic keeps category=defender/attacker and timeout_ms=12000, default mode=classic. Flag images (flagcdn.com) are drawn from image_questions pool at ~25% probability (4/15 sampled duels had img URL); remaining 75% were text-only capitals questions from QUESTIONS['capitals'].",
+  "tested_scope": ["backend"],
+  "passed": [
+    "POST /api/rooms/create with mode=flags_only returns code+host_token",
+    "GET /api/rooms/{code}/state returns mode field (flags_only and classic)",
+    "Default create (no mode) -> mode=classic",
+    "15/15 flags_only attacks produced duel.category=='capitals' regardless of attacker/defender category (sports, history)",
+    "15/15 flags_only duels had timeout_ms=6000",
+    "Classic mode attack: category is attacker's (sports) since target was empty cell, timeout_ms=12000",
+    "Sample flag img URLs matched https://flagcdn.com/w320/*.png format"
+  ],
+  "failed": [
+    {
+      "area": "flags_only question pool composition",
+      "issue": "Only ~25% of flags_only duels served flag-image questions from IMAGE_QUESTIONS['capitals']; the other 75% were plain-text capitals questions from QUESTIONS['capitals'] (no img). Spec says 'all questions from capitals (flags) only' which may imply 100% flag-image questions.",
+      "evidence": "Sampled 15 duels: with_img=4, text_only=11. get_random_question() uses 25% probability path for IMAGE_QUESTIONS before falling back to text QUESTIONS.",
+      "priority": "MEDIUM"
+    }
+  ],
+  "action_items": [
+    "Clarify intent: if flags_only mode should serve ONLY flag-image questions (100%), update get_random_question() or /rooms/attack to force image-only pool when mode=='flags_only' (e.g., always pick from IMAGE_QUESTIONS['capitals']). Otherwise current behavior is acceptable."
+  ],
+  "success_rate": {"backend": "100% for stated acceptance criteria (mode field, category forcing, timeout); design nuance noted separately", "frontend": "not tested"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}
