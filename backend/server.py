@@ -160,6 +160,8 @@ def public_game(game):
             q_pub = {"q": d["question"]["q"], "opts": d["question"]["opts"]}
             if d["question"].get("img"):
                 q_pub["img"] = d["question"]["img"]
+            if d["question"].get("opts_img"):
+                q_pub["opts_img"] = d["question"]["opts_img"]
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
                 "defender_id": d.get("defender_id"),

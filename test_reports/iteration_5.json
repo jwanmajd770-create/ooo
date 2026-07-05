@@ -1,0 +1,18 @@
+{
+  "summary": "Backend testing for flag questions expansion (108 total: 78 Type A flag->name + 30 Type B name->flag). Verified data structure integrity, HTTP validity of a random sample of 25 flag URLs (w320 + w160), and end-to-end serialization of both question types through the /api/rooms/{code}/state endpoint during real duels.",
+  "tested_scope": ["backend", "integration"],
+  "passed": [
+    "image_questions.py imports cleanly; IMAGE_QUESTIONS['capitals'] has exactly 108 entries (78 Type A with 'img', 30 Type B with 'opts_img')",
+    "All 108 questions have valid structure: opts length 4, a in [0,3], every question has either 'img' or 'opts_img' (opts_img length 4 when present)",
+    "Random sample of 25 flag URLs (mix of https://flagcdn.com/w320/*.png and https://flagcdn.com/w160/*.png) all returned HTTP 200 with content-type image/png",
+    "POST /api/rooms/create, /api/rooms/join (capitals), /api/rooms/start, /api/rooms/attack, /api/rooms/answer all working",
+    "GET /api/rooms/{code}/state serves duel.question with 'img' for Type A questions and 'opts_img' (4 URLs) for Type B questions; observed both types across 33 duels in a single game",
+    "Public question payload correctly hides the answer field 'a' (only q, opts, and img/opts_img exposed)",
+    "Example Type B captured: 'أي هذه الأعلام هو علم المغرب؟' with opts_img [iq, ir, ma, so].png and Type A captured: 'لأي دولة هذا العلم؟' with img w320/ca.png"
+  ],
+  "failed": [],
+  "action_items": [],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "retest_needed": false,
+  "full_testing_deferred": true
+}

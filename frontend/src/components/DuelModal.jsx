@@ -110,6 +110,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
               const myAnswer = meId === duel.attacker_id ? duel.attacker_answer : duel.defender_answer;
               const isMine = showResult && i === myAnswer;
               const isHiddenByEye = eyeHint === i && !showResult;
+              const optImg = duel.question.opts_img && duel.question.opts_img[i];
               return (
                 <button
                   key={i}
@@ -126,8 +127,17 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                       : "border-white/10 bg-[#1A1A24] hover:bg-white/10 hover:border-white/30 disabled:opacity-40"
                   }`}
                 >
-                  <span className="text-gray-500 ms-2">{["أ", "ب", "ج", "د"][i]}.</span>
-                  {opt}
+                  {optImg ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-gray-500 text-xs">{["أ", "ب", "ج", "د"][i]}</span>
+                      <img src={optImg} alt={`option ${i}`} onError={(e) => { e.currentTarget.style.display='none'; }} className="w-24 h-16 md:w-32 md:h-20 object-contain rounded border border-white/10 bg-black/30" />
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-gray-500 ms-2">{["أ", "ب", "ج", "د"][i]}.</span>
+                      {opt}
+                    </>
+                  )}
                 </button>
               );
             })}
