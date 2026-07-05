@@ -35,6 +35,8 @@ export const api = {
         target_col,
       })
       .then((r) => r.data),
+  duelPass: (code, player_token) =>
+    axios.post(`${API}/rooms/duel_pass`, { code, player_token }).then((r) => r.data),
   custom: (code, host_token, category_id, q, opts, a) =>
     axios.post(`${API}/rooms/custom_question`, { code, host_token, category_id, q, opts, a }).then((r) => r.data),
   nextTurn: (code, host_token) =>

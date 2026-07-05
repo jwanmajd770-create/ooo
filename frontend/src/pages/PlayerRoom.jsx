@@ -87,7 +87,11 @@ export default function PlayerRoom() {
   };
 
   const answer = async (idx) => {
-    try { await api.answer(code, token, idx); } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); }
+    try { const r = await api.answer(code, token, idx); return r; } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); throw e; }
+  };
+
+  const duelPass = async () => {
+    try { const r = await api.duelPass(code, token); sfx.powerup(); return r; } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); throw e; }
   };
 
   const shields = {};
@@ -172,6 +176,7 @@ export default function PlayerRoom() {
           meId={me?.id}
           players={state.players}
           onAnswer={answer}
+          onPass={duelPass}
           onSkip={useSkip}
           onTime={useTime}
           onEye={useEye}

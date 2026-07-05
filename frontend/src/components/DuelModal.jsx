@@ -1,25 +1,16 @@
 import { useEffect, useState, useRef } from "react";
 import { sfx } from "../lib/sfx";
+import { api } from "../lib/api";
+import { toast } from "sonner";
 
-export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000 }) {
+export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000, onPass }) {
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
-  const [remaining, setRemaining] = useState(() => {
-    if (!duel) return (effectiveTimeout / 1000);
-    // stored-clock duel
-    if (duel.turn) {
-      const myRole = duel.attacker_id === meId ? 'attacker' : 'defender';
-      const stored = duel[myRole + '_stored_time'] ?? 30.0;
-      if (duel.turn === myRole) {
-        return Math.max(0, stored - (Date.now() / 1000 - duel.turn_start_ts));
-      }
-      return stored;
-    }
-    return effectiveTimeout / 1000;
-  });
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
   const lastTickSec = useRef(null);
   const lastResolved = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [wrongIdx, setWrongIdx] = useState(null);
 
   // countdown 3-2-1 when a new duel appears
   useEffect(() => {
@@ -54,28 +45,19 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   useEffect(() => {
     if (!duel) return;
     const iv = setInterval(() => {
-      let rem = effectiveTimeout / 1000;
-      if (duel.turn) {
-        const myRole = duel.attacker_id === meId ? 'attacker' : 'defender';
-        const stored = duel[myRole + '_stored_time'] ?? 30.0;
-        if (duel.turn === myRole) {
-          rem = Math.max(0, stored - (Date.now() / 1000 - duel.turn_start_ts));
-        } else {
-          rem = stored;
-        }
-      } else {
-        const elapsed = Date.now() - (duel.started_at || 0);
-        rem = Math.max(0, (duelTimeoutMs - elapsed) / 1000);
-      }
-      setRemaining(rem);
-      const sec = Math.ceil(rem);
+      const nowSec = Date.now() / 1000;
+      const attStored = duel.attacker_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
+      const defStored = duel.defender_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
+      const attRem = duel.turn === "attacker" ? Math.max(0, attStored - (nowSec - (duel.turn_start_ts || nowSec))) : attStored;
+      const defRem = duel.turn === "defender" ? Math.max(0, defStored - (nowSec - (duel.turn_start_ts || nowSec))) : defStored;
+      const sec = Math.ceil(Math.min(attRem, defRem));
       if (!duel.resolved && sec <= 5 && sec > 0 && sec !== lastTickSec.current) {
         lastTickSec.current = sec;
         sfx.tick();
       }
     }, 100);
     return () => clearInterval(iv);
-  }, [duel, effectiveTimeout, meId]);
+  }, [duel, duelTimeoutMs, meId]);
 
   if (!duel) return null;
   const attacker = players.find((p) => p.id === duel.attacker_id);
@@ -84,7 +66,12 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const alreadyAnswered = duel.resolved || (meId === duel.attacker_id ? duel.attacker_answered : meId === duel.defender_id ? duel.defender_answered : false);
   const showResult = duel.resolved;
   const correct = showResult ? duel.question.a : null;
-  const danger = remaining <= 3 && !showResult;
+  const nowSec = Date.now() / 1000;
+  const attStored = duel.attacker_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
+  const defStored = duel.defender_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
+  const attRem = duel.turn === "attacker" ? Math.max(0, attStored - (nowSec - (duel.turn_start_ts || nowSec))) : attStored;
+  const defRem = duel.turn === "defender" ? Math.max(0, defStored - (nowSec - (duel.turn_start_ts || nowSec))) : defStored;
+  const danger = (duel.turn === "attacker" ? attRem : defRem) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
 
   return (
@@ -100,16 +87,18 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
         <div className="flex items-center justify-between mb-4">
           <div className="text-right">
             <div className="text-xs text-gray-500">المهاجم</div>
-            <div className="font-bold" style={{ color: attacker?.color }}>{attacker?.icon} {attacker?.name}</div>
+            <div className={`font-bold ${duel.turn === 'attacker' ? 'pulse-glow' : ''}`} style={{ color: attacker?.color }}>{attacker?.icon} {attacker?.name}</div>
+            <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'attacker' ? 'text-white' : 'text-gray-400'}`} data-testid="attacker-timer">{Math.ceil(attRem)}</div>
           </div>
-          <div className={`text-6xl md:text-8xl font-black tabular ${danger ? "text-red-500 animate-pulse" : "text-white"}`} data-testid="duel-timer">
-            {Math.ceil(remaining)}
+          <div className="flex flex-col items-center">
+            <div className={`px-3 py-1 rounded-full text-xs font-bold ${duel.turn === 'attacker' ? 'bg-cyan-400 text-black' : 'bg-gray-700 text-white'}`}>{duel.turn === 'attacker' ? 'دور المهاجم' : duel.turn === 'defender' ? 'دور المدافع' : 'مبارزة'}</div>
           </div>
           <div className="text-left">
             <div className="text-xs text-gray-500">{defender ? "المدافع" : "غزو أرض"}</div>
-            <div className="font-bold" style={{ color: defender?.color || "#39FF14" }}>
+            <div className={`font-bold ${duel.turn === 'defender' ? 'pulse-glow' : ''}`} style={{ color: defender?.color || "#39FF14" }}>
               {defender ? `${defender.icon} ${defender.name}` : "🏳️ خانة فارغة"}
             </div>
+            <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'defender' ? 'text-white' : 'text-gray-400'}`} data-testid="defender-timer">{Math.ceil(defRem)}</div>
           </div>
         </div>
 
@@ -140,10 +129,29 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                 <button
                   key={i}
                   data-testid={`answer-${i}`}
-                  disabled={!amInvolved || showResult || isHiddenByEye || (duel.turn ? duel.turn !== myRole : alreadyAnswered)}
-                  onClick={() => onAnswer(i)}
+                  disabled={!amInvolved || showResult || isHiddenByEye || (duel.turn ? duel.turn !== myRole : alreadyAnswered) || busy}
+                  onClick={async () => {
+                    if (busy) return;
+                    setBusy(true);
+                    try {
+                      const res = await onAnswer(i);
+                      if (res && res.correct === false) {
+                        setWrongIdx(i);
+                        sfx.wrong();
+                        setTimeout(() => setWrongIdx(null), 600);
+                      } else {
+                        sfx.correct();
+                      }
+                    } catch (e) {
+                      toast.error(e?.response?.data?.detail || 'فشل');
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
                   className={`p-4 rounded-xl text-base md:text-lg font-bold border-2 transition-all text-right ${
-                    isHiddenByEye
+                    (wrongIdx === i)
+                      ? "border-red-500 bg-red-500/20 animate-shake"
+                      : isHiddenByEye
                       ? "opacity-20 line-through border-red-500/30 bg-red-500/10"
                       : isCorrect
                       ? "border-green-400 bg-green-400/20"
