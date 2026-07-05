@@ -98,7 +98,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
               <img
                 src={duel.question.img}
                 alt="question"
-                className="max-h-56 md:max-h-72 rounded-xl border-2 border-white/10 shadow-2xl object-cover"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                className="max-h-56 md:max-h-72 rounded-xl border-2 border-white/10 shadow-2xl object-contain bg-black/40 p-2"
                 data-testid="duel-image"
               />
             </div>

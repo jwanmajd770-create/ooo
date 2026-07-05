@@ -1,0 +1,29 @@
+{
+  "summary": "Verified the image_questions.py fix. CRITICAL: All 29 proxied image URLs (images.weserv.nl?url=upload.wikimedia.org/...) return HTTP 404 with an error JSON body instead of an image. Root cause is upstream: Wikimedia's upload.wikimedia.org blocks the weserv fetcher (returns 400/403 to weserv with default UA, 403 with a custom UA), which causes weserv to respond with {\"status\":\"error\",\"code\":404,\"message\":\"The requested URL returned error: 400\"} and content-type application/json. Consequently, duel images will still fail to load in the browser, and the DuelModal onError handler will hide them all - user still sees no image (bug not fixed).",
+  "tested_scope": ["backend", "integration"],
+  "passed": [
+    "GET /api/ returns 200 with {message: 'Arena Game API'}",
+    "POST /api/rooms/create returns 200 with a room code (backend is healthy)",
+    "image_questions.py has been updated to use images.weserv.nl proxy on all 29 URLs (code change confirmed)"
+  ],
+  "failed": [
+    {
+      "area": "Image proxy URLs (images.weserv.nl -> upload.wikimedia.org)",
+      "issue": "ALL 29/29 URLs return HTTP 404 with application/json error body: '{\"status\":\"error\",\"code\":404,\"message\":\"The requested URL returned error: 400\"}'. Direct upstream (upload.wikimedia.org) returns 400 with browser UA and 403 with custom UA - Wikimedia is blocking hotlinking/bot access. The weserv proxy cannot fetch the source and therefore returns 404 to clients.",
+      "evidence": "curl -A 'Mozilla/5.0' 'https://images.weserv.nl/?url=upload.wikimedia.org/wikipedia/commons/thumb/2/23/Everest_from_Kalapatthar.jpg/320px-Everest_from_Kalapatthar.jpg&w=400' -> HTTP 404, CT: application/json, body: {\"status\":\"error\",\"code\":404,\"message\":\"The requested URL returned error: 400\"}. Direct wikimedia HEAD with browser UA -> HTTP 400. Same pattern verified across all 29 URLs (python HEAD sweep: 0/29 OK, 29/29 FAIL).",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "The weserv+wikimedia combination does NOT work for these thumb URLs. Options: (a) switch to a different image host entirely - e.g., Unsplash Source (https://source.unsplash.com/320x240/?eiffel-tower), Pexels/Pixabay direct CDN, or Openverse/commons.wikimedia.org via a different mirror; (b) self-host the ~29 images under /app/frontend/public/img/ or /app/backend/static/ and serve locally - most reliable; (c) pre-download images at container start and serve from FastAPI's StaticFiles.",
+    "Do NOT rely solely on the onError handler as a 'fix' - hiding a broken image is the same UX as before (user still sees no image, just no broken icon). The real fix is a working URL.",
+    "After swapping URLs, re-run: python -c \"import urllib.request; ...HEAD each URL...\" and confirm 200 + Content-Type: image/*."
+  ],
+  "success_rate": {"backend": "20%", "frontend": "not_tested"},
+  "retest_needed": true,
+  "full_testing_deferred": true,
+  "notes": {
+    "duel_flow_e2e": "Not exercised - the /api/rooms/join and /api/rooms/start endpoints require additional fields (name, category_id, host_token) beyond what was tried. This did not need to be validated because the URL-level check is sufficient: whatever question the backend serves from IMAGE_QUESTIONS will carry a broken URL. Full E2E duel flow can be re-attempted after URLs are fixed.",
+    "test_credentials": "N/A - no auth in this app"
+  }
+}
