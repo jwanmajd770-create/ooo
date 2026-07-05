@@ -70,12 +70,12 @@ def can_attack(game, attacker_id, target_r, target_c):
     return False
 
 
-def get_random_question(category_id, custom_questions=None):
-    # If host added custom questions for this category, mix them in
+def get_random_question(category_id, custom_questions=None, force_image=False):
     imgs = IMAGE_QUESTIONS.get(category_id, [])
     quotes = QUOTE_QUESTIONS.get(category_id, [])
     customs = (custom_questions or {}).get(category_id, [])
-    # 25% image if available
+    if force_image and imgs:
+        return random.choice(imgs)
     if imgs and random.random() < 0.25:
         return random.choice(imgs)
     # 15% quote if available
@@ -557,7 +557,7 @@ async def use_powerup(req: PowerUpReq):
     if pu == "skip":
         if not d or d.get("resolved"):
             raise HTTPException(400, "استخدم أثناء المبارزة")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"))
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None

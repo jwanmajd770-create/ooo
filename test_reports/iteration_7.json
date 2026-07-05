@@ -1,0 +1,24 @@
+{
+  "summary": "Tested flags_only mode duel questions. Fix INCOMPLETE: force_image param is only applied in the /rooms/powerup 'skip' handler (line 560), but NOT in the primary duel initiator /rooms/attack (line 415). Sampling 25 flags_only duels resulted in only 12% having an 'img' field (3/25), not 100%. Classic mode correctly returns 0% images in this sample (still within probability).",
+  "tested_scope": ["backend"],
+  "passed": [
+    "POST /api/rooms/create with mode=flags_only",
+    "POST /api/rooms/join, /rooms/start, /rooms/attack lifecycle works",
+    "Classic mode duels do not force images (0/20 in sample)"
+  ],
+  "failed": [
+    {
+      "area": "backend / server.py line 415 (/rooms/attack)",
+      "issue": "get_random_question() called WITHOUT force_image param when mode==flags_only. As a result, primary attack duels use the 25%/15%/20% probability logic and mostly return text questions (capitals) instead of flag images.",
+      "evidence": "Sampled 25 fresh flags_only rooms -> attack -> duel.question. Only 3/25 (12.0%) had 'img' field pointing to flagcdn.com. Examples of text-only questions returned: 'عاصمة البرازيل؟', 'عاصمة إيطاليا؟', 'أي هذه الأعلام هو علم الجزائر؟' (this is a text-choice flag question without img). Expected: 100% with img=https://flagcdn.com/...",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "In /app/backend/server.py line 415, change `question = get_random_question(category, game.get('custom_questions'))` to `question = get_random_function(category, game.get('custom_questions'), force_image=(game.get('mode') == 'flags_only'))` (same pattern already applied at line 560).",
+    "After fix, re-sample flags_only duels to confirm 100% of question objects contain an 'img' field."
+  ],
+  "success_rate": {"backend": "50%", "frontend": "n/a"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
