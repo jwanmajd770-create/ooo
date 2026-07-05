@@ -2,6 +2,9 @@
 const path = require("path");
 require("dotenv").config();
 
+// Skip TypeScript type-checking on every build path — this is a JS project.
+process.env.TSC_COMPILE_ON_ERROR = 'true';
+
 // Check if we're in development/preview mode (not production build)
 // Craco sets NODE_ENV=development for start, NODE_ENV=production for build
 const isDevServer = process.env.NODE_ENV !== "production";
@@ -84,6 +87,11 @@ let webpackConfig = {
       '@': path.resolve(__dirname, 'src'),
     },
     configure: (webpackConfig) => {
+      // Remove ForkTsCheckerWebpackPlugin — JS-only project; the plugin's ajv
+      // dependency causes Vercel build failures due to version conflicts.
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        (plugin) => plugin.constructor.name !== 'ForkTsCheckerWebpackPlugin'
+      );
 
       // Add ignored patterns to reduce watched directories
         webpackConfig.watchOptions = {
