@@ -1,0 +1,22 @@
+{
+  "summary": "Retest requested to confirm fix at /rooms/attack line 415. Fix was NOT applied. Line 415 still reads: `question = get_random_question(category, game.get('custom_questions'))` — no force_image kwarg. Only /rooms/powerup 'skip' at line 560 uses force_image. Sampled 25 fresh flags_only duels: only 5/25 (20.0%) returned flag questions (4 with img, 1 with opts_img); remaining 20/25 (80%) were text-only capitals like 'عاصمة الفلبين؟'. Expected 100%.",
+  "tested_scope": ["backend"],
+  "passed": [
+    "POST /api/rooms/create, /rooms/join, /rooms/start, /rooms/attack lifecycle works with flags_only mode",
+    "GET /api/rooms/{code}/state returns duel.question object correctly"
+  ],
+  "failed": [
+    {
+      "area": "backend / server.py line 415 (/rooms/attack)",
+      "issue": "Claimed fix was NOT applied. grep confirms line 415 still has `get_random_question(category, game.get('custom_questions'))` with no force_image kwarg. Only line 560 (powerup skip handler) uses force_image=(game.get('mode') == 'flags_only').",
+      "evidence": "grep -n 'force_image' server.py -> only lines 73 (def) and 560 (call). 25-sample test: 5/25 = 20.0% flag questions (img OR opts_img). Text-only examples returned: 'عاصمة الفلبين؟', 'عاصمة كندا؟', 'عاصمة أستراليا؟'.",
+      "priority": "HIGH"
+    }
+  ],
+  "action_items": [
+    "Actually apply the fix at /app/backend/server.py line 415: change `question = get_random_question(category, game.get('custom_questions'))` to `question = get_random_question(category, game.get('custom_questions'), force_image=(game.get('mode') == 'flags_only'))`. The claim that this was already done is incorrect — verify with `grep -n force_image /app/backend/server.py`."
+  ],
+  "success_rate": {"backend": "20%", "frontend": "n/a"},
+  "retest_needed": true,
+  "full_testing_deferred": true
+}
