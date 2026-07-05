@@ -12,6 +12,8 @@ from typing import Optional, Dict
 from datetime import datetime, timezone
 
 from questions import CATEGORIES, QUESTIONS
+from image_questions import IMAGE_QUESTIONS
+from stats import save_game_result, get_hall_of_fame, get_recent_games
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -68,8 +70,15 @@ def can_attack(game, attacker_id, target_r, target_c):
 
 
 def get_random_question(category_id):
+    # 30% chance to pick an image question if available for this category
+    imgs = IMAGE_QUESTIONS.get(category_id, [])
+    if imgs and random.random() < 0.3:
+        return random.choice(imgs)
     qs = QUESTIONS.get(category_id, [])
     if not qs:
+        # fallback to image if only imgs exist
+        if imgs:
+            return random.choice(imgs)
         return None
     return random.choice(qs)
 
@@ -79,6 +88,13 @@ def next_turn(game):
     if len(alive) <= 1:
         game["state"] = "finished"
         game["winner"] = alive[0]["id"] if alive else None
+        if not game.get("_stats_saved"):
+            game["_stats_saved"] = True
+            import asyncio
+            try:
+                asyncio.create_task(save_game_result(db, game))
+            except Exception:
+                pass
         return
     idx = game.get("turn_idx", 0)
     for _ in range(len(game["players"])):
@@ -133,12 +149,15 @@ def public_game(game):
                 "winner_id": d.get("winner_id"),
             }
         else:
+            q_pub = {"q": d["question"]["q"], "opts": d["question"]["opts"]}
+            if d["question"].get("img"):
+                q_pub["img"] = d["question"]["img"]
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
                 "defender_id": d.get("defender_id"),
                 "target": d["target"],
                 "category": d["category"],
-                "question": {"q": d["question"]["q"], "opts": d["question"]["opts"]},
+                "question": q_pub,
                 "started_at": d["started_at"],
                 "resolved": False,
                 "attacker_answered": d.get("attacker_answer") is not None,
@@ -201,6 +220,16 @@ async def root():
 @api_router.get("/categories")
 async def get_categories():
     return {"categories": CATEGORIES}
+
+
+@api_router.get("/stats/leaderboard")
+async def stats_leaderboard(limit: int = 20):
+    return {"players": await get_hall_of_fame(db, limit)}
+
+
+@api_router.get("/stats/recent")
+async def stats_recent(limit: int = 10):
+    return {"games": await get_recent_games(db, limit)}
 
 
 @api_router.post("/rooms/create")
@@ -437,6 +466,14 @@ def resolve_duel_if_ready(game):
     if len(alive) <= 1:
         game["state"] = "finished"
         game["winner"] = alive[0]["id"] if alive else None
+        # persist stats
+        if not game.get("_stats_saved"):
+            game["_stats_saved"] = True
+            import asyncio
+            try:
+                asyncio.create_task(save_game_result(db, game))
+            except Exception:
+                pass
 
     game["pending_action"] = {"type": "duel_review", "until": now + 3800}
 

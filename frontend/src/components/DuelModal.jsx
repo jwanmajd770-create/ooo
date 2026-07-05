@@ -1,7 +1,42 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { sfx } from "../lib/sfx";
 
 export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000 }) {
   const [remaining, setRemaining] = useState(duelTimeoutMs / 1000);
+  const [countdown, setCountdown] = useState(null);
+  const lastDuelStart = useRef(null);
+  const lastTickSec = useRef(null);
+  const lastResolved = useRef(false);
+
+  // countdown 3-2-1 when a new duel appears
+  useEffect(() => {
+    if (!duel) {
+      lastDuelStart.current = null;
+      lastResolved.current = false;
+      return;
+    }
+    if (lastDuelStart.current !== duel.started_at && !duel.resolved) {
+      lastDuelStart.current = duel.started_at;
+      sfx.resume();
+      sfx.countdown();
+      setCountdown(3);
+      const t1 = setTimeout(() => setCountdown(2), 1000);
+      const t2 = setTimeout(() => setCountdown(1), 2000);
+      const t3 = setTimeout(() => setCountdown("انطلق!"), 3000);
+      const t4 = setTimeout(() => setCountdown(null), 3800);
+      return () => { [t1, t2, t3, t4].forEach(clearTimeout); };
+    }
+  }, [duel?.started_at, duel?.resolved]);
+
+  // play sound on resolve
+  useEffect(() => {
+    if (!duel) return;
+    if (duel.resolved && !lastResolved.current) {
+      lastResolved.current = true;
+      if (duel.winner_id === meId) sfx.correct();
+      else if (meId && duel.winner_id && duel.winner_id !== meId) sfx.wrong();
+    }
+  }, [duel?.resolved, duel?.winner_id, meId]);
 
   useEffect(() => {
     if (!duel) return;
@@ -9,6 +44,11 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       const elapsed = Date.now() - duel.started_at;
       const rem = Math.max(0, (duelTimeoutMs - elapsed) / 1000);
       setRemaining(rem);
+      const sec = Math.ceil(rem);
+      if (!duel.resolved && sec <= 5 && sec > 0 && sec !== lastTickSec.current) {
+        lastTickSec.current = sec;
+        sfx.tick();
+      }
     }, 100);
     return () => clearInterval(iv);
   }, [duel, duelTimeoutMs]);
@@ -24,6 +64,13 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
+      {countdown !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 pointer-events-none">
+          <div className="text-[10rem] md:text-[15rem] font-black neon-cyan animate-pulse tabular" data-testid="countdown">
+            {countdown}
+          </div>
+        </div>
+      )}
       <div className="w-full max-w-2xl">
         <div className="flex items-center justify-between mb-4">
           <div className="text-right">
@@ -46,6 +93,16 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
             الفئة: {duel.category}
           </div>
           <h2 className="text-2xl md:text-3xl font-bold mb-6 mt-2 leading-relaxed" data-testid="duel-question">{duel.question.q}</h2>
+          {duel.question.img && (
+            <div className="mb-6 flex justify-center">
+              <img
+                src={duel.question.img}
+                alt="question"
+                className="max-h-56 md:max-h-72 rounded-xl border-2 border-white/10 shadow-2xl object-cover"
+                data-testid="duel-image"
+              />
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {duel.question.opts.map((opt, i) => {
               const isCorrect = showResult && i === correct;

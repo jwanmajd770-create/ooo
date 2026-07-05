@@ -78,6 +78,15 @@ export default function Home() {
             <Swords className="w-4 h-4" />
             <span>6×6 · 20 فئة · 300 سؤال · قدرات خاصة</span>
           </div>
+          <div className="mt-4">
+            <button
+              data-testid="btn-hall"
+              onClick={() => nav("/hall")}
+              className="text-sm text-yellow-400 hover:text-yellow-300 underline decoration-dotted underline-offset-4"
+            >
+              🏆 قاعة المشاهير — أفضل اللاعبين
+            </button>
+          </div>
         </div>
 
         {!mode && (

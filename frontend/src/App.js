@@ -4,6 +4,7 @@ import Home from "./pages/Home";
 import HostRoom from "./pages/HostRoom";
 import PlayerRoom from "./pages/PlayerRoom";
 import SpectatorRoom from "./pages/SpectatorRoom";
+import HallOfFame from "./pages/HallOfFame";
 import "./App.css";
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/host/:code" element={<HostRoom />} />
           <Route path="/play/:code" element={<PlayerRoom />} />
           <Route path="/watch/:code" element={<SpectatorRoom />} />
+          <Route path="/hall" element={<HallOfFame />} />
         </Routes>
       </BrowserRouter>
       <Toaster richColors position="top-center" theme="dark" />

@@ -7,6 +7,7 @@ import DuelModal from "../components/DuelModal";
 import Leaderboard from "../components/Leaderboard";
 import { toast } from "sonner";
 import { Shield, Trophy } from "lucide-react";
+import { sfx } from "../lib/sfx";
 
 export default function PlayerRoom() {
   const { code } = useParams();
@@ -26,6 +27,14 @@ export default function PlayerRoom() {
   useEffect(() => {
     if (!state?.duel) setEyeHint(null);
   }, [state?.duel?.started_at]);
+
+  // play win sound on victory
+  useEffect(() => {
+    if (state?.state === "finished") {
+      sfx.resume();
+      sfx.win();
+    }
+  }, [state?.state]);
 
   if (error) return <div className="p-6 text-red-400">{error}</div>;
   if (!state) return <div className="p-6 text-center">جاري التحميل...</div>;
@@ -50,9 +59,11 @@ export default function PlayerRoom() {
   const canShieldCell = (r, c) => shieldMode && state.grid[r][c] === me?.id;
 
   const cellClick = async (r, c) => {
+    sfx.resume();
     if (shieldMode) {
       try {
         await api.powerup(code, token, "shield", r, c);
+        sfx.powerup();
         toast.success("درع مفعّل!");
         setShieldMode(false);
       } catch (e) {
@@ -61,6 +72,7 @@ export default function PlayerRoom() {
       return;
     }
     try {
+      sfx.attack();
       const r2 = await api.attack(code, token, r, c);
       if (r2.blocked) toast.warning("درع منع الهجوم!");
     } catch (e) {
@@ -75,9 +87,9 @@ export default function PlayerRoom() {
   const shields = {};
   state.players.forEach((p) => { if (p.shield_on) shields[p.id] = p.shield_on; });
 
-  const useSkip = async () => { try { await api.powerup(code, token, "skip"); toast.success("سؤال جديد"); } catch (e) { toast.error(e?.response?.data?.detail); } };
-  const useTime = async () => { try { await api.powerup(code, token, "time"); toast.success("+5 ثواني"); } catch (e) { toast.error(e?.response?.data?.detail); } };
-  const useEye = async () => { try { const r = await api.powerup(code, token, "eye"); setEyeHint(r.eye_hint); toast.success("خيار خاطئ حُذف"); } catch (e) { toast.error(e?.response?.data?.detail); } };
+  const useSkip = async () => { try { await api.powerup(code, token, "skip"); sfx.powerup(); toast.success("سؤال جديد"); } catch (e) { toast.error(e?.response?.data?.detail); } };
+  const useTime = async () => { try { await api.powerup(code, token, "time"); sfx.powerup(); toast.success("+5 ثواني"); } catch (e) { toast.error(e?.response?.data?.detail); } };
+  const useEye = async () => { try { const r = await api.powerup(code, token, "eye"); sfx.powerup(); setEyeHint(r.eye_hint); toast.success("خيار خاطئ حُذف"); } catch (e) { toast.error(e?.response?.data?.detail); } };
 
   return (
     <div className="min-h-screen p-3 md:p-6">
