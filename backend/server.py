@@ -4,7 +4,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agora_token_builder import RtcTokenBuilder
+from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
 import logging
 import random
 import string
@@ -360,13 +360,10 @@ async def get_voice_token(request: Request):
         current_timestamp = int(time.time())
         privilege_expired_ts = current_timestamp + expiration_time_in_seconds
 
-        token = RtcTokenBuilder.buildTokenWithUid(
-            appId=app_id,
-            appCertificate=app_certificate,
-            channelName=channel_name,
-            uid=uid,
-            role=1,
-            privilegeExpiredTs=privilege_expired_ts
+        token = RtcTokenBuilder.build_token_with_uid(
+            app_id, app_certificate, channel_name, uid,
+            Role_Publisher,
+            privilege_expired_ts
         )
 
         if token is None or token == "":
