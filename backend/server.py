@@ -354,7 +354,7 @@ async def get_voice_token(request: Request):
         app_certificate = os.environ.get("AGORA_APP_CERT") or os.environ.get("AGORA_APP_CERTIFICATE")
         
         if not app_id or not app_certificate:
-            return {"error": "Missing credentials", "app_id_exists": bool(app_id), "cert_exists": bool(app_certificate)}
+            return {"error": "Missing credentials", "app_id": bool(app_id), "cert": bool(app_certificate)}
         
         from agora_token_builder import RtcTokenBuilder
         import time
