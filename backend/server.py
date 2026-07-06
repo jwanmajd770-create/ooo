@@ -1,15 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import sys
-import os
+import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
+from agora_token_builder import RtcTokenBuilder
 import logging
 import random
 import string
-import zlib
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -342,35 +340,54 @@ class VoiceTokenReq(BaseModel):
     player_id: str
 
 
-@api_router.post("/voice/token")
-async def voice_token(req: VoiceTokenReq):
-    app_id = os.environ.get("AGORA_APP_ID")
-    app_cert = os.environ.get("AGORA_APP_CERT")
-    if not app_id or not app_cert:
-        raise HTTPException(
-            503,
-            "Agora voice chat is not available. Missing AGORA_APP_ID or AGORA_APP_CERT in environment variables.",
-        )
-    channel = f"floor_{req.room_id}"
-    expire_ts = int(time.time()) + 3600
-    uid = zlib.crc32(str(req.player_id).encode("utf-8")) % 4294967295
-    if uid == 0:
-        uid = 1
-
+@app.post("/api/voice/token")
+async def get_voice_token(request: Request):
     try:
-        token = RtcTokenBuilder.build_token_with_uid(app_id, app_cert, channel, uid, Role_Publisher, 3600, 3600)
-    except Exception as exc:
-        logging.exception("Failed to build Agora AccessToken2 token")
-        raise HTTPException(500, f"Failed to build Agora token: {exc}")
+        data = await request.json()
+        channel_name = data.get("channel")
+        uid = int(data.get("uid", 0))
 
-    if token is None or token == "":
-        logging.error("Agora token generation returned empty token for room=%s uid=%s", req.room_id, uid)
-        raise HTTPException(500, "Failed to build Agora token: token generation returned empty token")
+        if not channel_name:
+            raise HTTPException(status_code=400, detail="Channel name required")
 
-    if isinstance(token, bytes):
-        token = token.decode("utf-8")
+        app_id = os.environ.get("AGORA_APP_ID")
+        app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
 
-    return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
+        if not app_id or not app_certificate:
+            raise HTTPException(status_code=500, detail="Agora credentials not configured")
+
+        expiration_time_in_seconds = 3600 * 24
+        current_timestamp = int(time.time())
+        privilege_expired_ts = current_timestamp + expiration_time_in_seconds
+
+        token = RtcTokenBuilder.buildTokenWithUid(
+            appId=app_id,
+            appCertificate=app_certificate,
+            channelName=channel_name,
+            uid=uid,
+            role=1,
+            privilegeExpiredTs=privilege_expired_ts
+        )
+
+        if token is None or token == "":
+            logging.error("Agora token generation returned empty token for channel=%s uid=%s", channel_name, uid)
+            raise HTTPException(status_code=500, detail="Failed to build Agora token: token generation returned empty token")
+
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+
+        return {
+            "token": token,
+            "app_id": app_id,
+            "channel": channel_name,
+            "uid": uid
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.exception("Token generation failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.get("/")
