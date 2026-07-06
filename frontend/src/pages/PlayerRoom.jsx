@@ -1,3 +1,4 @@
+import AgoraRTC from "agora-rtc-sdk-ng";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useMemo } from "react";
 import { useGameState } from "../hooks/useGameState";
@@ -26,6 +27,34 @@ export default function PlayerRoom() {
     [state?.duel?.attacker_id, state?.duel?.defender_id]
   );
   const isCurrentDuelPlayer = isDuelActive && duelPlayers.includes(me?.id);
+  const [isTalking, setIsTalking] = useState(false);
+  const [agoraClient, setAgoraClient] = useState(null);
+  const [agoraTrack, setAgoraTrack] = useState(null);
+  const roomId = code;
+  const playerId = me?.id;
+
+  const toggleTalk = async () => {
+    if (!isTalking) {
+      try {
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        await client.join("AGORA_APP_ID", roomId, null, playerId);
+        const track = await AgoraRTC.createMicrophoneAudioTrack();
+        await client.publish([track]);
+        setAgoraClient(client);
+        setAgoraTrack(track);
+        setIsTalking(true);
+      } catch (err) {
+        console.error("Mic error:", err);
+        alert("تأكد من السماح بالمايكروفون");
+      }
+    } else {
+      if (agoraTrack) agoraTrack.stop();
+      if (agoraClient) await agoraClient.leave();
+      setIsTalking(false);
+      setAgoraClient(null);
+      setAgoraTrack(null);
+    }
+  };
 
   useEffect(() => {
     if (!info) nav("/");
@@ -130,6 +159,14 @@ export default function PlayerRoom() {
           <div className="text-left text-xs text-gray-500">
             <div>الرمز: <span className="tabular">{code}</span></div>
             <div>الفوز: {me?.wins || 0}</div>
+            <button
+              onClick={toggleTalk}
+              className={`mt-1 px-3 py-1 rounded-full text-xs font-bold ${
+                isTalking ? "bg-red-500 text-white" : "bg-green-500 text-white"
+              }`}
+            >
+              {isTalking ? "🔴 إيقاف" : "🎙️ تحدث"}
+            </button>
           </div>
         </div>
 
