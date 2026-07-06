@@ -2,8 +2,10 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
+import sys
 import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
 import logging
 import random
 import string
@@ -360,6 +362,14 @@ async def voice_token(req: VoiceTokenReq):
     except Exception as exc:
         logging.exception("Failed to build Agora AccessToken2 token")
         raise HTTPException(500, f"Failed to build Agora token: {exc}")
+
+    if token is None or token == "":
+        logging.error("Agora token generation returned empty token for room=%s uid=%s", req.room_id, uid)
+        raise HTTPException(500, "Failed to build Agora token: token generation returned empty token")
+
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+
     return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
 
 
