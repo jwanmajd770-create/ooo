@@ -343,7 +343,13 @@ async def get_voice_token(request: Request):
     try:
         data = await request.json()
         channel = data.get("roomId") or data.get("room_id")
-        uid = int(data.get("playerId") or data.get("player_id") or 0)
+        player_id_raw = data.get("playerId") or data.get("player_id") or "0"
+        try:
+            uid = int(player_id_raw)
+        except ValueError:
+            # تحويل النص (token) إلى رقم ثابت لـ Agora
+            import hashlib
+            uid = int(hashlib.md5(player_id_raw.encode()).hexdigest(), 16) % (2**32)
         
         app_id = os.environ.get("AGORA_APP_ID")
         app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
