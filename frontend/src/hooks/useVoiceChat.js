@@ -107,7 +107,11 @@ export function useVoiceChat({ roomId, playerId, isDuelActive, isCurrentDuelPlay
 
     async function updatePublish() {
       const client = clientRef.current;
-      if (!client || !connected || !voiceEnabled) return;
+      console.log("[voice] attempting mic, connected:", connected, "shouldPublish:", shouldPublish);
+      if (!client || !connected || !voiceEnabled) {
+        console.log("[voice] skipping publish — client/connected/voiceEnabled:", !!client, connected, voiceEnabled);
+        return;
+      }
 
       try {
         if (shouldPublish && !localAudioTrackRef.current) {
@@ -118,13 +122,13 @@ export function useVoiceChat({ roomId, playerId, isDuelActive, isCurrentDuelPlay
             return;
           }
           localAudioTrackRef.current = track;
-          await client.publish([track]);
+          await client.publish(track);
           track.setEnabled(true);
           setMicMuted(false);
         } else if (!shouldPublish && localAudioTrackRef.current) {
           const track = localAudioTrackRef.current;
           try {
-            await client.unpublish([track]);
+            await client.unpublish(track);
           } catch (e) {}
           track.stop();
           track.close();
