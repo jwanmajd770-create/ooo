@@ -352,7 +352,7 @@ async def get_voice_token(request: Request):
             uid = int(hashlib.md5(player_id_raw.encode()).hexdigest(), 16) % (2**32)
         
         app_id = os.environ.get("AGORA_APP_ID")
-        app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
+        app_certificate = os.environ.get("AGORA_APP_CERT") or os.environ.get("AGORA_APP_CERTIFICATE")
         
         if not app_id or not app_certificate:
             return {"error": "Missing credentials", "app_id_exists": bool(app_id), "cert_exists": bool(app_certificate)}
