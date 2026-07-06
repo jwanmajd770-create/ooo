@@ -1,5 +1,3 @@
-import os
-import sys
 from AccessToken2 import AccessToken, kRtcServiceType
 
 Role_Publisher = 1

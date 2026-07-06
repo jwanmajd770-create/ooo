@@ -4,6 +4,7 @@ import base64
 import struct
 import random
 import time
+from Packer import pack_string, pack_uint32
 
 kRtcServiceType = 1
 
@@ -26,10 +27,10 @@ class AccessToken:
         ret = struct.pack("<I", self.issue_ts)
         ret += struct.pack("<I", self.expire)
         ret += struct.pack("<I", self.salt)
-        ret += struct.pack("<H", len(self.app_id)) + self.app_id.encode('utf-8')
-        ret += struct.pack("<I", len(self.privileges))
+        ret += pack_string(self.app_id)
+        ret += pack_uint32(len(self.privileges))
         for privilege, expire in self.privileges.items():
-            ret += struct.pack("<I", privilege)
-            ret += struct.pack("<I", expire)
+            ret += pack_uint32(privilege)
+            ret += pack_uint32(expire)
         signature = hmac.new(self.app_certificate.encode('utf-8'), ret, hashlib.sha256).digest()
         return get_version() + base64.b64encode(signature + ret).decode('utf-8')
