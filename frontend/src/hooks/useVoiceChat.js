@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 
 const DEFAULT_VOLUME_POLL_INTERVAL_MS = 1000;
 
-export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayers, isCurrentDuelPlayer, onError }) {
+export function useVoiceChat({ roomId, playerId, isDuelActive, isCurrentDuelPlayer, onError }) {
   const clientRef = useRef(null);
   const localAudioTrackRef = useRef(null);
   const [connected, setConnected] = useState(false);
@@ -12,8 +12,9 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
   const [volumeState, setVolumeState] = useState({});
   const [voiceEnabled, setVoiceEnabled] = useState(true);
 
-  const shouldPublish = isDuelActive && isCurrentDuelPlayer;
+  const shouldPublish = !isDuelActive || isCurrentDuelPlayer;
 
+  // الانضمام للقناة عند دخول الغرفة
   useEffect(() => {
     let alive = true;
 
@@ -22,6 +23,13 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
 
       try {
         const tokenRes = await api.voiceToken(roomId, playerId);
+        const joinParams = {
+          appId: tokenRes.app_id,
+          channel: tokenRes.channel,
+          token: tokenRes.token,
+          uid: tokenRes.uid,
+        };
+
         const rtcClient = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         clientRef.current = rtcClient;
 
@@ -29,41 +37,43 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
           try {
             await rtcClient.subscribe(user, mediaType);
             if (mediaType === "audio") {
-              const remoteAudioTrack = user.audioTrack;
-              remoteAudioTrack?.play();
+              user.audioTrack?.play();
             }
           } catch (err) {
             console.warn("Agora subscribe failed", err);
           }
         });
 
-        rtcClient.on("user-unpublished", (user) => {
-          // nothing else needed; remote track cleanup is automatic
-        });
-
         rtcClient.on("volume-indicator", (volumes) => {
           if (!alive) return;
           const active = {};
           volumes.forEach((item) => {
-            if (item.level > 0) active[item.uid] = item.level;
+            if (item.level > 5) active[item.uid] = item.level;
           });
           setVolumeState(active);
         });
 
-        await rtcClient.join(tokenRes.app_id, tokenRes.channel, tokenRes.token, tokenRes.uid);
-        setConnected(true);
-        rtcClient.enableAudioVolumeIndicator(DEFAULT_VOLUME_POLL_INTERVAL_MS);
+        rtcClient.enableAudioVolumeIndicator();
 
-        if (shouldPublish) {
-          const track = await AgoraRTC.createMicrophoneAudioTrack();
-          localAudioTrackRef.current = track;
-          await rtcClient.publish(track);
-          setMicMuted(false);
+        await rtcClient.join(
+          joinParams.appId,
+          joinParams.channel,
+          joinParams.token,
+          joinParams.uid
+        );
+
+        if (!alive) {
+          await rtcClient.leave();
+          return;
         }
+
+        setConnected(true);
       } catch (err) {
         console.warn("Voice chat unavailable", err);
-        setVoiceEnabled(false);
-        onError?.(err?.message || "فشل الاتصال بالصوت");
+        if (alive) {
+          setVoiceEnabled(false);
+          onError?.("الصوت غير متاح حالياً — اللعبة مستمرة بشكل طبيعي");
+        }
       }
     }
 
@@ -77,78 +87,85 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
         try {
           track.stop();
           track.close();
-        } catch (_) {}
+        } catch (e) {}
+        localAudioTrackRef.current = null;
       }
       if (client) {
         try {
-          if (track) client.unpublish(track);
-        } catch (_) {}
-        try {
           client.leave();
-        } catch (_) {}
+        } catch (e) {}
+        clientRef.current = null;
       }
-      clientRef.current = null;
-      localAudioTrackRef.current = null;
       setConnected(false);
     };
-  }, [roomId, playerId, shouldPublish, onError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, playerId]);
 
+  // نشر/إلغاء نشر الميكروفون حسب حالة المبارزة
   useEffect(() => {
+    let cancelled = false;
+
     async function updatePublish() {
       const client = clientRef.current;
-      if (!client) return;
-      if (shouldPublish) {
-        if (!localAudioTrackRef.current) {
-          try {
-            const track = await AgoraRTC.createMicrophoneAudioTrack();
-            localAudioTrackRef.current = track;
-            await client.publish(track);
-            setMicMuted(false);
-          } catch (err) {
-            console.warn("Failed to publish microphone", err);
-            setVoiceEnabled(false);
-            onError?.(err?.message || "فشل في تفعيل الميكروفون");
+      if (!client || !connected || !voiceEnabled) return;
+
+      try {
+        if (shouldPublish && !localAudioTrackRef.current) {
+          const track = await AgoraRTC.createMicrophoneAudioTrack();
+          if (cancelled) {
+            track.stop();
+            track.close();
+            return;
           }
-        }
-      } else {
-        if (localAudioTrackRef.current) {
+          localAudioTrackRef.current = track;
+          await client.publish([track]);
+          track.setEnabled(true);
+          setMicMuted(false);
+        } else if (!shouldPublish && localAudioTrackRef.current) {
+          const track = localAudioTrackRef.current;
           try {
-            await client.unpublish(localAudioTrackRef.current);
-          } catch (_) {}
-          try {
-            localAudioTrackRef.current.stop();
-            localAudioTrackRef.current.close();
-          } catch (_) {}
+            await client.unpublish([track]);
+          } catch (e) {}
+          track.stop();
+          track.close();
           localAudioTrackRef.current = null;
           setMicMuted(true);
         }
+      } catch (err) {
+        console.warn("Voice publish/unpublish failed", err);
+        if (!cancelled) {
+          onError?.("تعذر تشغيل الميكروفون — تحقق من إذن المتصفح");
+        }
       }
     }
-    updatePublish();
-  }, [shouldPublish, onError]);
 
-  const toggleMute = async () => {
+    updatePublish();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldPublish, connected, voiceEnabled]);
+
+  // كتم/إلغاء كتم
+  async function toggleMute() {
     const track = localAudioTrackRef.current;
     if (!track) return;
+    const newMuted = !micMuted;
     try {
-      if (micMuted) {
-        await track.setEnabled(true);
-      } else {
-        await track.setEnabled(false);
-      }
-      setMicMuted(!micMuted);
+      await track.setEnabled(!newMuted);
+      setMicMuted(newMuted);
     } catch (err) {
-      console.warn("Failed to toggle mute", err);
-      onError?.(err?.message || "فشل في كتم الصوت");
+      console.warn("Toggle mute failed", err);
     }
-  };
+  }
 
   return {
     connected,
-    voiceEnabled,
     micMuted,
-    toggleMute,
     volumeState,
-    localAudioTrack: localAudioTrackRef.current,
+    voiceEnabled,
+    toggleMute,
+    isPublishing: shouldPublish && !!localAudioTrackRef.current,
   };
 }
