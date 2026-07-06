@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from agora_token_builder import RtcTokenBuilder, RtcRole
+from agora_token_builder import RtcTokenBuilder
 import os
 import logging
 import random
@@ -356,7 +356,7 @@ async def voice_token(req: VoiceTokenReq):
             app_cert,
             channel,
             req.player_id,
-            RtcRole.PUBLISHER,
+            1,
             expire_ts,
         )
     except Exception as exc:
