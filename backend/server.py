@@ -7,6 +7,7 @@ import os
 import logging
 import random
 import string
+import zlib
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -350,10 +351,9 @@ async def voice_token(req: VoiceTokenReq):
         )
     channel = f"floor_{req.room_id}"
     expire_ts = int(time.time()) + 3600
-    try:
-        uid = int(req.player_id)
-    except ValueError:
-        raise HTTPException(400, "player_id must be an integer for Agora voice token generation")
+    uid = zlib.crc32(str(req.player_id).encode("utf-8")) % 4294967295
+    if uid == 0:
+        uid = 1
 
     try:
         token = RtcTokenBuilder.buildTokenWithUid(
@@ -367,7 +367,7 @@ async def voice_token(req: VoiceTokenReq):
     except Exception as exc:
         logging.exception("Failed to build Agora token")
         raise HTTPException(500, f"Failed to build Agora token: {exc}")
-    return {"token": token, "app_id": app_id, "channel": channel}
+    return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
 
 
 @api_router.get("/")

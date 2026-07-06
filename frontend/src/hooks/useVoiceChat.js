@@ -50,7 +50,7 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
           setVolumeState(active);
         });
 
-        await rtcClient.join(tokenRes.app_id, tokenRes.channel, tokenRes.token, playerId);
+        await rtcClient.join(tokenRes.app_id, tokenRes.channel, tokenRes.token, tokenRes.uid);
         setConnected(true);
         rtcClient.enableAudioVolumeIndicator(DEFAULT_VOLUME_POLL_INTERVAL_MS);
 
