@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-from agora_token import build_rtc_token
+from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
 import os
 import logging
 import random
@@ -356,7 +356,7 @@ async def voice_token(req: VoiceTokenReq):
         uid = 1
 
     try:
-        token = build_rtc_token(app_id, app_cert, channel, uid, expire_seconds=3600)
+        token = RtcTokenBuilder.build_token_with_uid(app_id, app_cert, channel, uid, Role_Publisher, 3600, 3600)
     except Exception as exc:
         logging.exception("Failed to build Agora AccessToken2 token")
         raise HTTPException(500, f"Failed to build Agora token: {exc}")
