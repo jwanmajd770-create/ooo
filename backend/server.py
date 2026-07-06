@@ -349,21 +349,42 @@ async def get_voice_token(request: Request):
         app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
         
         if not app_id or not app_certificate:
-            raise HTTPException(status_code=500, detail="Agora credentials not configured")
+            return {"error": "Missing credentials", "app_id_exists": bool(app_id), "cert_exists": bool(app_certificate)}
         
-        from agora_token_builder import RtcTokenBuilder
-        import time
+        import hmac, hashlib, base64, struct, time, random
         
-        expire = int(time.time()) + 3600
-        token = RtcTokenBuilder.buildTokenWithUid(
-            app_id, app_certificate, channel, uid, 1, expire
-        )
+        def generate_token(app_id, app_certificate, channel_name, uid, expire=3600):
+            issue_ts = int(time.time())
+            expire_ts = issue_ts + expire
+            salt = random.randint(1, 4294967295)
+            
+            content = struct.pack("<I", issue_ts)
+            content += struct.pack("<I", expire_ts)
+            content += struct.pack("<I", salt)
+            content += struct.pack("<H", len(app_id)) + app_id.encode('utf-8')
+            content += struct.pack("<H", len(channel_name)) + channel_name.encode('utf-8')
+            content += struct.pack("<I", uid)
+            content += struct.pack("<H", 0)
+            
+            signature = hmac.new(app_certificate.encode('utf-8'), content, hashlib.sha256).digest()
+            return "007" + base64.b64encode(signature + content).decode('utf-8')
         
-        return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
+        token = generate_token(app_id, app_certificate, channel, uid)
+        
+        return {
+            "token": token,
+            "app_id": app_id,
+            "channel": channel,
+            "uid": uid
+        }
+        
     except Exception as e:
         import traceback
-        print("TOKEN ERROR:", traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "type": type(e).__name__
+        }
 
 
 @api_router.get("/categories")
