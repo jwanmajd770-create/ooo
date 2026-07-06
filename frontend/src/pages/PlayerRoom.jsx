@@ -151,7 +151,7 @@ export default function PlayerRoom() {
           <div className="text-left text-xs text-gray-500">
             <div>الرمز: <span className="tabular">{code}</span></div>
             <div>الفوز: {me?.wins || 0}</div>
-            {isCurrentDuelPlayer && state.state !== "finished" && (
+            {state.state !== "finished" && (
               <button
                 onClick={toggleMute}
                 className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-xs text-white"
