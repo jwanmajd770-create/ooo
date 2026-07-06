@@ -1,5 +1,6 @@
+import AgoraRTC from "agora-rtc-sdk-ng";
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useGameState } from "../hooks/useGameState";
 import { api } from "../lib/api";
 import GameGrid from "../components/GameGrid";
@@ -14,6 +15,45 @@ export default function HostRoom() {
   const nav = useNavigate();
   const hostToken = localStorage.getItem(`host_${code}`);
   const { state, error } = useGameState(code, hostToken, 700);
+
+  const [isTalking, setIsTalking] = useState(false);
+  const [agoraClient, setAgoraClient] = useState(null);
+  const [agoraTrack, setAgoraTrack] = useState(null);
+
+  const toggleTalk = async () => {
+    if (!isTalking) {
+      try {
+        const tokenRes = await api.voiceToken(code, `host-${code}`);
+        if (tokenRes.error || !tokenRes.token || !tokenRes.app_id) {
+          alert("خطأ في خادم الصوت");
+          return;
+        }
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        client.on("user-published", async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === "audio" && user.audioTrack) user.audioTrack.play();
+        });
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "audio" && user.audioTrack) user.audioTrack.stop();
+        });
+        await client.join(tokenRes.app_id, code, tokenRes.token, tokenRes.uid);
+        const track = await AgoraRTC.createMicrophoneAudioTrack();
+        await client.publish([track]);
+        setAgoraClient(client);
+        setAgoraTrack(track);
+        setIsTalking(true);
+      } catch (err) {
+        console.error("[voice] Host mic error:", err);
+        alert("تأكد من السماح بالمايكروفون");
+      }
+    } else {
+      if (agoraTrack) agoraTrack.stop();
+      if (agoraClient) await agoraClient.leave();
+      setIsTalking(false);
+      setAgoraClient(null);
+      setAgoraTrack(null);
+    }
+  };
 
   useEffect(() => {
     if (!hostToken) nav("/");
@@ -66,6 +106,9 @@ export default function HostRoom() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 items-center">
+            <button onClick={toggleTalk} className={`px-3 py-2 rounded-lg text-xs font-bold ${isTalking ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-green-500/20 text-green-400 hover:bg-green-500/30"}`}>
+              {isTalking ? "🔴 إيقاف" : "🎙️ تحدث"}
+            </button>
             <span className="text-xs text-gray-400">اللاعبون: {state.players.length}</span>
             <span className="text-xs text-gray-400">المشاهدون: {state.spectators.length}</span>
             {state.sudden_death && <span className="px-3 py-1 rounded-full bg-red-500 text-white text-xs font-bold animate-pulse">⚡ الموت المفاجئ</span>}
