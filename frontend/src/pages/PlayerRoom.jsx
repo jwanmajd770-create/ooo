@@ -36,7 +36,22 @@ export default function PlayerRoom() {
   const toggleTalk = async () => {
     if (!isTalking) {
       try {
+        console.log("[voice] Requesting token for room:", roomId, "player:", playerId);
         const tokenRes = await api.voiceToken(roomId, playerId);
+        console.log("[voice] Token response:", tokenRes);
+        
+        if (tokenRes.error) {
+          console.error("[voice] Backend error:", tokenRes.error);
+          alert("خطأ في الخادم: " + tokenRes.error);
+          return;
+        }
+        
+        if (!tokenRes.token || !tokenRes.app_id) {
+          console.error("[voice] Invalid response:", tokenRes);
+          alert("استجابة غير صحيحة من الخادم");
+          return;
+        }
+        
         const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
         await client.join(tokenRes.app_id, roomId, tokenRes.token, playerId);
         const track = await AgoraRTC.createMicrophoneAudioTrack();
@@ -45,7 +60,7 @@ export default function PlayerRoom() {
         setAgoraTrack(track);
         setIsTalking(true);
       } catch (err) {
-        console.error("Mic error:", err);
+        console.error("[voice] Mic error:", err);
         alert("تأكد من السماح بالمايكروفون");
       }
     } else {
