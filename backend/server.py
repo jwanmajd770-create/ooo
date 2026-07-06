@@ -338,6 +338,34 @@ async def root():
     return {"message": "Arena Game API"}
 
 
+@app.post("/api/voice/token")
+async def get_voice_token(request: Request):
+    try:
+        data = await request.json()
+        channel = data.get("roomId") or data.get("room_id")
+        uid = int(data.get("playerId") or data.get("player_id") or 0)
+        
+        app_id = os.environ.get("AGORA_APP_ID")
+        app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
+        
+        if not app_id or not app_certificate:
+            raise HTTPException(status_code=500, detail="Agora credentials not configured")
+        
+        from agora_token_builder import RtcTokenBuilder
+        import time
+        
+        expire = int(time.time()) + 3600
+        token = RtcTokenBuilder.buildTokenWithUid(
+            app_id, app_certificate, channel, uid, 1, expire
+        )
+        
+        return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
+    except Exception as e:
+        import traceback
+        print("TOKEN ERROR:", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/categories")
 async def get_categories():
     return {"categories": CATEGORIES}
