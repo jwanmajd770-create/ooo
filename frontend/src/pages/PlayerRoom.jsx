@@ -53,6 +53,13 @@ export default function PlayerRoom() {
         }
         
         const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        client.on("user-published", async (user, mediaType) => {
+          await client.subscribe(user, mediaType);
+          if (mediaType === "audio" && user.audioTrack) user.audioTrack.play();
+        });
+        client.on("user-unpublished", (user, mediaType) => {
+          if (mediaType === "audio" && user.audioTrack) user.audioTrack.stop();
+        });
         await client.join(tokenRes.app_id, roomId, tokenRes.token, tokenRes.uid);
         const track = await AgoraRTC.createMicrophoneAudioTrack();
         await client.publish([track]);
