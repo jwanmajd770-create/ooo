@@ -71,10 +71,6 @@ export function useVoiceChat({ roomId, playerId, token, isDuelActive, duelPlayer
 
     return () => {
       alive = false;
-      if (volumeTimer) {
-        clearInterval(volumeTimer);
-        volumeTimer = null;
-      }
       const client = clientRef.current;
       const track = localAudioTrackRef.current;
       if (track) {
