@@ -344,8 +344,8 @@ class VoiceTokenReq(BaseModel):
 async def get_voice_token(request: Request):
     try:
         data = await request.json()
-        channel_name = data.get("channel") or data.get("roomId")
-        uid = int(data.get("uid") or data.get("playerId") or 0)
+        channel_name = data.get("channel") or data.get("roomId") or data.get("room_id")
+        uid = int(data.get("uid") or data.get("playerId") or data.get("player_id") or 0)
 
         if not channel_name:
             raise HTTPException(status_code=400, detail="Channel name required")
