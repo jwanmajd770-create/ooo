@@ -32,6 +32,7 @@
     "@radix-ui/react-toggle-group": "1.1.7",
     "@radix-ui/react-tooltip": "1.2.4",
     "@tanstack/react-query": "5.56.2",
+    "agora-rtc-sdk-ng": "^4.24.5",
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
     "axios": "1.16.0",
@@ -138,7 +139,7 @@
     "**/jest-util/picomatch": "2.3.2",
     "**/tinyglobby/picomatch": "4.0.4"
   },
- "packageManager": "yarn@1.22.22...",
+  "packageManager": "yarn@1.22.22...",
   "overrides": {
     "fork-ts-checker-webpack-plugin": {
       "ajv": "6.12.6",

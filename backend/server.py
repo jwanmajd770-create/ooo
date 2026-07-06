@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from agora_token_builder import RtcTokenBuilder, RtcRole
 import os
 import logging
 import random
@@ -331,6 +332,36 @@ class CustomQuestionReq(BaseModel):
 class DuelPassReq(BaseModel):
     code: str
     player_token: str
+
+
+class VoiceTokenReq(BaseModel):
+    room_id: str
+    player_id: str
+
+
+@api_router.post("/voice/token")
+async def voice_token(req: VoiceTokenReq):
+    app_id = os.environ.get("AGORA_APP_ID")
+    app_cert = os.environ.get("AGORA_APP_CERT")
+    if not app_id or not app_cert:
+        raise HTTPException(
+            503,
+            "Agora voice chat is not available. Missing AGORA_APP_ID or AGORA_APP_CERT in environment variables.",
+        )
+    channel = f"floor_{req.room_id}"
+    expire_ts = int(time.time()) + 3600
+    try:
+        token = RtcTokenBuilder.buildTokenWithUserAccount(
+            app_id,
+            app_cert,
+            channel,
+            req.player_id,
+            RtcRole.PUBLISHER,
+            expire_ts,
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to build Agora token: {exc}")
+    return {"token": token, "app_id": app_id, "channel": channel}
 
 
 @api_router.get("/")

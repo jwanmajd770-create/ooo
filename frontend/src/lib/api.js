@@ -42,4 +42,6 @@ export const api = {
   nextTurn: (code, host_token) =>
     axios.post(`${API}/rooms/next_turn`, { code, host_token }).then((r) => r.data),
   tick: (code) => axios.post(`${API}/rooms/tick?code=${code}`).then((r) => r.data),
+  voiceToken: (room_id, player_id) =>
+    axios.post(`${API}/voice/token`, { room_id, player_id }).then((r) => r.data),
 };
