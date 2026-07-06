@@ -37,7 +37,7 @@ export default function PlayerRoom() {
     if (!isTalking) {
       try {
         const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-        await client.join("YOUR_REAL_AGORA_APP_ID", roomId, null, playerId);
+        await client.join("cec208f83bb54fd9a462dc870522eb52", roomId, null, playerId);
         const track = await AgoraRTC.createMicrophoneAudioTrack();
         await client.publish([track]);
         setAgoraClient(client);
