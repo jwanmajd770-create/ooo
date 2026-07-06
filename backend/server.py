@@ -4,7 +4,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agora_token_builder import RtcTokenBuilder
+from agora_token_builder.RtcTokenBuilder import RtcTokenBuilder
 import logging
 import random
 import string
