@@ -2,9 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Request
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from RtcTokenBuilder2 import RtcTokenBuilder, Role_Publisher
+import os
 import logging
 import random
 import string
@@ -333,58 +331,6 @@ class CustomQuestionReq(BaseModel):
 class DuelPassReq(BaseModel):
     code: str
     player_token: str
-
-
-class VoiceTokenReq(BaseModel):
-    room_id: str
-    player_id: str
-
-
-@app.post("/api/voice/token")
-async def get_voice_token(request: Request):
-    try:
-        data = await request.json()
-        channel_name = data.get("channel") or data.get("roomId") or data.get("room_id")
-        uid = int(data.get("uid") or data.get("playerId") or data.get("player_id") or 0)
-
-        if not channel_name:
-            raise HTTPException(status_code=400, detail="Channel name required")
-
-        app_id = os.environ.get("AGORA_APP_ID")
-        app_certificate = os.environ.get("AGORA_APP_CERTIFICATE")
-
-        if not app_id or not app_certificate:
-            raise HTTPException(status_code=500, detail="Agora credentials not configured")
-
-        expiration_time_in_seconds = 3600 * 24
-        current_timestamp = int(time.time())
-        privilege_expired_ts = current_timestamp + expiration_time_in_seconds
-
-        token = RtcTokenBuilder.build_token_with_uid(
-            app_id, app_certificate, channel_name, uid,
-            Role_Publisher,
-            privilege_expired_ts
-        )
-
-        if token is None or token == "":
-            logging.error("Agora token generation returned empty token for channel=%s uid=%s", channel_name, uid)
-            raise HTTPException(status_code=500, detail="Failed to build Agora token: token generation returned empty token")
-
-        if isinstance(token, bytes):
-            token = token.decode("utf-8")
-
-        return {
-            "token": token,
-            "app_id": app_id,
-            "channel": channel_name,
-            "uid": uid
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Token generation failed")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api_router.get("/")

@@ -1,13 +1,12 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState, useMemo } from "react";
 import { useGameState } from "../hooks/useGameState";
-import { useVoiceChat } from "../hooks/useVoiceChat";
 import { api } from "../lib/api";
 import GameGrid from "../components/GameGrid";
 import DuelModal from "../components/DuelModal";
 import Leaderboard from "../components/Leaderboard";
 import { toast } from "sonner";
-import { Shield, Trophy, Mic, MicOff } from "lucide-react";
+import { Shield, Trophy } from "lucide-react";
 import { sfx } from "../lib/sfx";
 
 export default function PlayerRoom() {
@@ -19,7 +18,6 @@ export default function PlayerRoom() {
   const { state, error } = useGameState(code, token, 600);
   const [shieldMode, setShieldMode] = useState(false);
   const [eyeHint, setEyeHint] = useState(null);
-  const [voiceError, setVoiceError] = useState(null);
 
   const me = state?.me;
   const isDuelActive = !!state?.duel && !state?.duel?.resolved;
@@ -29,19 +27,6 @@ export default function PlayerRoom() {
   );
   const isCurrentDuelPlayer = isDuelActive && duelPlayers.includes(me?.id);
 
-  const { connected: voiceConnected, voiceEnabled, micMuted, toggleMute, volumeState } = useVoiceChat({
-    roomId: code,
-    playerId: me?.id,
-    token,
-    isDuelActive,
-    duelPlayers,
-    isCurrentDuelPlayer,
-    onError: setVoiceError,
-  });
-
-  const speakingPlayerId = Object.keys(volumeState || {}).find((uid) => volumeState[uid] > 0);
-  const speakingPlayer = state?.players?.find((p) => p.id === speakingPlayerId);
-
   useEffect(() => {
     if (!info) nav("/");
   }, [info, nav]);
@@ -50,12 +35,6 @@ export default function PlayerRoom() {
   useEffect(() => {
     setEyeHint(null);
   }, [state?.duel?.started_at]);
-
-  useEffect(() => {
-    if (voiceError) {
-      toast.error(voiceError);
-    }
-  }, [voiceError]);
 
   // restore eye hint from server (survives page refresh)
   useEffect(() => {
@@ -151,14 +130,6 @@ export default function PlayerRoom() {
           <div className="text-left text-xs text-gray-500">
             <div>الرمز: <span className="tabular">{code}</span></div>
             <div>الفوز: {me?.wins || 0}</div>
-            {state.state !== "finished" && (
-              <button
-                onClick={toggleMute}
-                className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white/10 text-xs text-white"
-              >
-                {micMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />} {micMuted ? "كتم" : "تشغيل الصوت"}
-              </button>
-            )}
           </div>
         </div>
 
