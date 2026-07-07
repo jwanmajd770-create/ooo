@@ -262,6 +262,38 @@ class CustomQuestionReq(BaseModel):
     a: int
 
 
+class VoiceTokenReq(BaseModel):
+    room_id: str
+    player_id: str
+
+
+def _uid_from_player(player_id: str) -> int:
+    import zlib
+    return zlib.crc32(player_id.encode("utf-8")) & 0x7FFFFFFF
+
+
+@api_router.post("/voice/token")
+async def get_voice_token(req: VoiceTokenReq):
+    try:
+        channel = (req.room_id or "").strip()
+        uid = _uid_from_player((req.player_id or "").strip())
+        app_id = (os.environ.get("AGORA_APP_ID") or "").strip()
+        app_cert = (os.environ.get("AGORA_APP_CERT") or os.environ.get("AGORA_APP_CERTIFICATE") or "").strip()
+        if not app_id or not app_cert:
+            raise HTTPException(status_code=500, detail="Agora credentials not configured")
+        from agora_token_builder import RtcTokenBuilder
+        import time
+        expire = int(time.time()) + 3600
+        token = RtcTokenBuilder.buildTokenWithUid(app_id, app_cert, channel, uid, 1, expire)
+        return {"token": token, "app_id": app_id, "channel": channel, "uid": uid}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print("VOICE TOKEN ERROR:", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/")
 async def root():
     return {"message": "Arena Game API"}
