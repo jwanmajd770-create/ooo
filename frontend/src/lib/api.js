@@ -4,7 +4,7 @@ export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
 export const api = {
-  categories: () => axios.get(`${API}/categories`).then((r) => r.data),
+  categories: (mode) => axios.get(`${API}/categories`, { params: mode ? { mode } : {} }).then((r) => r.data),
   createRoom: (host_name, mode) =>
     axios.post(`${API}/rooms/create`, { host_name, mode: mode || "classic" }).then((r) => r.data),
   join: (code, name, category_id) =>

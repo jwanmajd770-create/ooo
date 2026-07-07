@@ -26,6 +26,18 @@ export default function Home() {
     }
   }, []);
 
+  // عند إدخال رمز غرفة صالح في وضع الانضمام، اجلب فئات وضع الغرفة (كروية أو عادية)
+  useEffect(() => {
+    if (mode !== "join" || !/^\d{6}$/.test(pin)) return;
+    api.state(pin).then((s) => {
+      const roomMode = s?.mode === "football" ? "football" : "classic";
+      api.categories(roomMode).then((r) => {
+        setCategories(r.categories);
+        setSelCat(null);
+      }).catch(() => {});
+    }).catch(() => {});
+  }, [pin, mode]);
+
   const createRoom = async () => {
     setLoading(true);
     try {
@@ -146,7 +158,7 @@ export default function Home() {
               className="w-full p-3 rounded-lg bg-black/50 border border-white/10 mb-4 text-white"
             />
             <label className="block text-sm mb-2 text-gray-400">وضع اللعب:</label>
-            <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="grid grid-cols-1 gap-2 mb-4">
               <button data-testid="mode-classic" onClick={() => setGameMode("classic")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "classic" ? "border-cyan-400 bg-cyan-400/10" : "border-white/10 bg-white/5"}`}>
                 <div className="font-bold">🎯 كلاسيكي</div>
                 <div className="text-xs text-gray-400">كل الفئات · 12 ثانية</div>
@@ -154,6 +166,10 @@ export default function Home() {
               <button data-testid="mode-flags" onClick={() => setGameMode("flags_only")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "flags_only" ? "border-yellow-400 bg-yellow-400/10" : "border-white/10 bg-white/5"}`}>
                 <div className="font-bold">🚩 بطولة الأعلام</div>
                 <div className="text-xs text-gray-400">أعلام فقط · 6 ثواني ⚡</div>
+              </button>
+              <button data-testid="mode-football" onClick={() => setGameMode("football")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "football" ? "border-green-400 bg-green-400/10" : "border-white/10 bg-white/5"}`}>
+                <div className="font-bold">⚽ بطولة كرة القدم</div>
+                <div className="text-xs text-gray-400">19 فئة كروية · اختر فئتك</div>
               </button>
             </div>
             <div className="flex gap-2">
