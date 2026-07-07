@@ -14,6 +14,11 @@ from datetime import datetime, timezone
 from questions import CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
+from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
+FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
+for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
+    QUESTIONS.setdefault(_fc_id, [])
+    QUESTIONS[_fc_id].extend(_fc_qs)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -263,7 +268,9 @@ async def root():
 
 
 @api_router.get("/categories")
-async def get_categories():
+async def get_categories(mode: str = "classic"):
+    if mode == "football":
+        return {"categories": FOOTBALL_CATEGORIES}
     return {"categories": CATEGORIES}
 
 
