@@ -316,9 +316,16 @@ async def join_room(req: JoinReq):
         raise HTTPException(400, "اللعبة بدأت بالفعل")
     if len(game["players"]) >= 12:
         raise HTTPException(400, "الغرفة ممتلئة")
-    cat = next((c for c in CATEGORIES if c["id"] == req.category_id), None)
-    if not cat:
-        raise HTTPException(400, "فئة غير صالحة")
+    # تحقق أن الفئة تنتمي لوضع الغرفة (كرة القدم لها فئاتها الخاصة)
+    room_mode = game.get("mode", "classic")
+    if room_mode == "football":
+        cat = next((c for c in FOOTBALL_CATEGORIES if c["id"] == req.category_id), None)
+        if not cat:
+            raise HTTPException(400, "هذه الغرفة لوضع كرة القدم — اختر فئة كروية")
+    else:
+        cat = next((c for c in CATEGORIES if c["id"] == req.category_id), None)
+        if not cat:
+            raise HTTPException(400, "فئة غير صالحة")
     token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
     pid = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     color = POWERUP_COLORS[len(game["players"]) % len(POWERUP_COLORS)]
