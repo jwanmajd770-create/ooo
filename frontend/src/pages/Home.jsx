@@ -4,39 +4,44 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Swords, Users, Eye, Zap } from "lucide-react";
 
+const MODES = [
+  { id: "classic",    title: "🎯 كلاسيكي",        desc: "كل الفئات · 12 ثانية",       color: "#22d3ee" },
+  { id: "flags_only", title: "🚩 بطولة الأعلام",   desc: "أعلام فقط · 6 ثواني ⚡",      color: "#facc15" },
+  { id: "football",   title: "⚽ بطولة كرة القدم", desc: "19 فئة كروية · اختر فئتك",   color: "#4ade80" },
+];
+
 export default function Home() {
   const nav = useNavigate();
-  const [mode, setMode] = useState(null); // null | join | spectate
+  const [gameMode, setGameMode] = useState(null); // null حتى يُختار الوضع أولاً
+  const [mode, setMode] = useState(null); // null | host | join | spectate
   const [pin, setPin] = useState("");
   const [name, setName] = useState("");
   const [categories, setCategories] = useState([]);
   const [selCat, setSelCat] = useState(null);
   const [loading, setLoading] = useState(false);
   const [hostName, setHostName] = useState("المقدم");
-  const [gameMode, setGameMode] = useState("classic");
 
+  // عند اختيار الوضع، اجلب فئاته
   useEffect(() => {
-    api.categories().then((r) => setCategories(r.categories)).catch(() => {});
-    // Auto-open join mode if ?join=XXXXXX in URL
+    if (!gameMode) return;
+    const apiMode = gameMode === "football" ? "football" : "classic";
+    api.categories(apiMode).then((r) => { setCategories(r.categories); setSelCat(null); }).catch(() => {});
+  }, [gameMode]);
+
+  // دعم الرابط المباشر ?join=XXXXXX&mode=football
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const joinCode = params.get("join");
     if (joinCode && /^\d{6}$/.test(joinCode)) {
-      setPin(joinCode);
-      setMode("join");
+      // اجلب وضع الغرفة تلقائياً ثم افتح الانضمام
+      api.state(joinCode).then((s) => {
+        const rm = s?.mode === "football" ? "football" : (s?.mode === "flags_only" ? "flags_only" : "classic");
+        setGameMode(rm);
+        setPin(joinCode);
+        setMode("join");
+      }).catch(() => {});
     }
   }, []);
-
-  // عند إدخال رمز غرفة صالح في وضع الانضمام، اجلب فئات وضع الغرفة (كروية أو عادية)
-  useEffect(() => {
-    if (mode !== "join" || !/^\d{6}$/.test(pin)) return;
-    api.state(pin).then((s) => {
-      const roomMode = s?.mode === "football" ? "football" : "classic";
-      api.categories(roomMode).then((r) => {
-        setCategories(r.categories);
-        setSelCat(null);
-      }).catch(() => {});
-    }).catch(() => {});
-  }, [pin, mode]);
 
   const createRoom = async () => {
     setLoading(true);
@@ -58,11 +63,20 @@ export default function Home() {
     }
     setLoading(true);
     try {
+      // تحقق أن وضع الغرفة يطابق الوضع المختار
+      const s = await api.state(pin);
+      const roomMode = s?.mode || "classic";
+      if (roomMode !== gameMode) {
+        const names = { classic: "الكلاسيكي", flags_only: "بطولة الأعلام", football: "بطولة كرة القدم" };
+        toast.error(`هذه الغرفة مخصصة لوضع «${names[roomMode] || roomMode}» وليس «${names[gameMode] || gameMode}»`);
+        setLoading(false);
+        return;
+      }
       const r = await api.join(pin, name, selCat);
       localStorage.setItem(`player_${pin}`, JSON.stringify({ token: r.token, id: r.player_id, name, category_id: selCat }));
       nav(`/play/${pin}`);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل الانضمام");
+      toast.error(e?.response?.data?.detail || "فشل الانضمام — تأكد من الرمز");
     } finally {
       setLoading(false);
     }
@@ -85,6 +99,11 @@ export default function Home() {
     }
   };
 
+  const resetAll = () => { setMode(null); setPin(""); setName(""); setSelCat(null); };
+  const backToModes = () => { resetAll(); setGameMode(null); };
+
+  const currentModeMeta = MODES.find((m) => m.id === gameMode);
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative">
       <div className="scanlines absolute inset-0 pointer-events-none" />
@@ -96,7 +115,7 @@ export default function Home() {
           <p className="text-lg md:text-xl text-gray-400 font-light">اغزُ الشبكة. اهزم خصومك. كن الأخير الصامد.</p>
           <div className="flex items-center justify-center gap-2 mt-3 text-sm text-gray-500">
             <Swords className="w-4 h-4" />
-            <span>6×6 · 20 فئة · 300 سؤال · قدرات خاصة</span>
+            <span>6×6 · قدرات خاصة · أوضاع متعددة</span>
           </div>
           <div className="mt-4">
             <button
@@ -109,47 +128,80 @@ export default function Home() {
           </div>
         </div>
 
-        {!mode && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button
-              data-testid="btn-host"
-              onClick={() => setMode("host")}
-              className="card-dark p-6 hover:border-cyan-400/50 transition-all group text-right"
-            >
-              <div className="w-12 h-12 rounded-xl bg-cyan-400/10 flex items-center justify-center mb-3 group-hover:bg-cyan-400/20">
-                <Zap className="w-6 h-6 text-cyan-400" />
-              </div>
-              <h3 className="text-xl font-bold mb-1">إنشاء أرض معركة</h3>
-              <p className="text-sm text-gray-400">كن المقدم وأدر اللعبة</p>
-            </button>
-            <button
-              data-testid="btn-join"
-              onClick={() => setMode("join")}
-              className="card-dark p-6 hover:border-pink-500/50 transition-all group text-right"
-            >
-              <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center mb-3 group-hover:bg-pink-500/20">
-                <Swords className="w-6 h-6 text-pink-500" />
-              </div>
-              <h3 className="text-xl font-bold mb-1">انضم كمتسابق</h3>
-              <p className="text-sm text-gray-400">اختر فئتك وابدأ الغزو</p>
-            </button>
-            <button
-              data-testid="btn-spectate"
-              onClick={() => setMode("spectate")}
-              className="card-dark p-6 hover:border-yellow-400/50 transition-all group text-right"
-            >
-              <div className="w-12 h-12 rounded-xl bg-yellow-400/10 flex items-center justify-center mb-3 group-hover:bg-yellow-400/20">
-                <Eye className="w-6 h-6 text-yellow-400" />
-              </div>
-              <h3 className="text-xl font-bold mb-1">شاهد كجمهور</h3>
-              <p className="text-sm text-gray-400">تابع المعركة لحظياً</p>
-            </button>
+        {/* الخطوة 1: اختيار الوضع أولاً */}
+        {!gameMode && (
+          <div>
+            <h2 className="text-center text-xl font-bold mb-4 text-gray-300">اختر وضع اللعب</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  data-testid={`mode-${m.id}`}
+                  onClick={() => setGameMode(m.id)}
+                  className="card-dark p-6 transition-all text-center hover:scale-[1.03]"
+                  style={{ borderColor: m.color + "40" }}
+                >
+                  <div className="text-3xl mb-2">{m.title.split(" ")[0]}</div>
+                  <h3 className="text-lg font-bold mb-1">{m.title.replace(/^\S+\s/, "")}</h3>
+                  <p className="text-xs text-gray-400">{m.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* الخطوة 2: اختيار الدور (بعد اختيار الوضع) */}
+        {gameMode && !mode && (
+          <div>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-sm text-gray-400">الوضع المختار:</span>
+              <span className="font-bold" style={{ color: currentModeMeta?.color }}>{currentModeMeta?.title}</span>
+              <button onClick={backToModes} className="text-xs text-gray-500 underline hover:text-gray-300 ms-2">تغيير</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <button
+                data-testid="btn-host"
+                onClick={() => setMode("host")}
+                className="card-dark p-6 hover:border-cyan-400/50 transition-all group text-right"
+              >
+                <div className="w-12 h-12 rounded-xl bg-cyan-400/10 flex items-center justify-center mb-3 group-hover:bg-cyan-400/20">
+                  <Zap className="w-6 h-6 text-cyan-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-1">إنشاء أرض معركة</h3>
+                <p className="text-sm text-gray-400">كن المقدم وأدر اللعبة</p>
+              </button>
+              <button
+                data-testid="btn-join"
+                onClick={() => setMode("join")}
+                className="card-dark p-6 hover:border-pink-500/50 transition-all group text-right"
+              >
+                <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center mb-3 group-hover:bg-pink-500/20">
+                  <Swords className="w-6 h-6 text-pink-500" />
+                </div>
+                <h3 className="text-xl font-bold mb-1">انضم كمتسابق</h3>
+                <p className="text-sm text-gray-400">اختر فئتك وابدأ الغزو</p>
+              </button>
+              <button
+                data-testid="btn-spectate"
+                onClick={() => setMode("spectate")}
+                className="card-dark p-6 hover:border-yellow-400/50 transition-all group text-right"
+              >
+                <div className="w-12 h-12 rounded-xl bg-yellow-400/10 flex items-center justify-center mb-3 group-hover:bg-yellow-400/20">
+                  <Eye className="w-6 h-6 text-yellow-400" />
+                </div>
+                <h3 className="text-xl font-bold mb-1">شاهد كجمهور</h3>
+                <p className="text-sm text-gray-400">تابع المعركة لحظياً</p>
+              </button>
+            </div>
           </div>
         )}
 
         {mode === "host" && (
           <div className="card-dark p-6">
-            <h2 className="text-2xl font-bold mb-4">إنشاء غرفة جديدة</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold">إنشاء غرفة جديدة</h2>
+              <span className="text-sm font-bold" style={{ color: currentModeMeta?.color }}>{currentModeMeta?.title}</span>
+            </div>
             <input
               data-testid="input-host-name"
               value={hostName}
@@ -157,33 +209,21 @@ export default function Home() {
               placeholder="اسم المقدم"
               className="w-full p-3 rounded-lg bg-black/50 border border-white/10 mb-4 text-white"
             />
-            <label className="block text-sm mb-2 text-gray-400">وضع اللعب:</label>
-            <div className="grid grid-cols-1 gap-2 mb-4">
-              <button data-testid="mode-classic" onClick={() => setGameMode("classic")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "classic" ? "border-cyan-400 bg-cyan-400/10" : "border-white/10 bg-white/5"}`}>
-                <div className="font-bold">🎯 كلاسيكي</div>
-                <div className="text-xs text-gray-400">كل الفئات · 12 ثانية</div>
-              </button>
-              <button data-testid="mode-flags" onClick={() => setGameMode("flags_only")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "flags_only" ? "border-yellow-400 bg-yellow-400/10" : "border-white/10 bg-white/5"}`}>
-                <div className="font-bold">🚩 بطولة الأعلام</div>
-                <div className="text-xs text-gray-400">أعلام فقط · 6 ثواني ⚡</div>
-              </button>
-              <button data-testid="mode-football" onClick={() => setGameMode("football")} className={`p-3 rounded-lg border-2 text-right ${gameMode === "football" ? "border-green-400 bg-green-400/10" : "border-white/10 bg-white/5"}`}>
-                <div className="font-bold">⚽ بطولة كرة القدم</div>
-                <div className="text-xs text-gray-400">19 فئة كروية · اختر فئتك</div>
-              </button>
-            </div>
             <div className="flex gap-2">
               <button data-testid="btn-create-room" disabled={loading} onClick={createRoom} className="flex-1 p-3 rounded-lg bg-cyan-400 text-black font-bold hover:bg-cyan-300 transition-all disabled:opacity-50">
                 {loading ? "..." : "أنشئ الغرفة"}
               </button>
-              <button onClick={() => setMode(null)} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">إلغاء</button>
+              <button onClick={resetAll} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">رجوع</button>
             </div>
           </div>
         )}
 
         {mode === "join" && (
           <div className="card-dark p-6">
-            <h2 className="text-2xl font-bold mb-4">انضم كمتسابق</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold">انضم كمتسابق</h2>
+              <span className="text-sm font-bold" style={{ color: currentModeMeta?.color }}>{currentModeMeta?.title}</span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <input
                 data-testid="input-pin"
@@ -219,14 +259,17 @@ export default function Home() {
               <button data-testid="btn-join-submit" disabled={loading} onClick={joinRoom} className="flex-1 p-3 rounded-lg bg-pink-500 text-white font-bold hover:bg-pink-400 transition-all disabled:opacity-50">
                 {loading ? "..." : "انضم للغرفة"}
               </button>
-              <button onClick={() => setMode(null)} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">إلغاء</button>
+              <button onClick={resetAll} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">رجوع</button>
             </div>
           </div>
         )}
 
         {mode === "spectate" && (
           <div className="card-dark p-6">
-            <h2 className="text-2xl font-bold mb-4">شاهد كجمهور</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold">شاهد كجمهور</h2>
+              <span className="text-sm font-bold" style={{ color: currentModeMeta?.color }}>{currentModeMeta?.title}</span>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <input
                 data-testid="input-spec-pin"
@@ -247,7 +290,7 @@ export default function Home() {
               <button data-testid="btn-spec-submit" disabled={loading} onClick={spectateRoom} className="flex-1 p-3 rounded-lg bg-yellow-400 text-black font-bold hover:bg-yellow-300 transition-all disabled:opacity-50">
                 {loading ? "..." : "ادخل"}
               </button>
-              <button onClick={() => setMode(null)} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">إلغاء</button>
+              <button onClick={resetAll} className="p-3 rounded-lg bg-white/5 hover:bg-white/10">رجوع</button>
             </div>
           </div>
         )}
