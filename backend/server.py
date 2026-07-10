@@ -244,13 +244,10 @@ def check_duel_timeout(game):
     turn = d.get("turn")
     if not turn:
         return
-    turn_id = d["attacker_id"] if turn == "attacker" else d.get("defender_id")
-    if turn_id is None:
-        # هجوم خانة فارغة: المهاجم لم يجب حتى نفد وقته
-        if _duel_current_remaining(d) <= 0:
-            d[f"{turn}_stored_time"] = 0.0
-            finish_duel(game, d["attacker_id"])
+    # هجوم على خانة فارغة (لا مدافع): لا عدّاد تنازلي إطلاقاً — انتظر إجابة المهاجم
+    if not d.get("defender_id"):
         return
+    turn_id = d["attacker_id"] if turn == "attacker" else d.get("defender_id")
     if _duel_current_remaining(d) <= 0:
         d[f"{turn}_stored_time"] = 0.0
         finish_duel(game, turn_id)
@@ -722,9 +719,10 @@ async def answer(req: AnswerReq):
     if me["id"] != turn_id:
         raise HTTPException(400, "ليس دورك في المبارزة")
 
-    # هل نفد وقت صاحب الدور؟
+    is_solo = not d.get("defender_id")  # خانة فارغة: بلا حدّ زمني
+    # هل نفد وقت صاحب الدور؟ (لا ينطبق على الخانة الفارغة)
     remaining = _duel_current_remaining(d)
-    if remaining <= 0:
+    if not is_solo and remaining <= 0:
         # خزّن رصيده صفراً وأنهِ المبارزة (خسر)
         d[f"{turn}_stored_time"] = 0.0
         finish_duel(game, turn_id)
@@ -740,7 +738,7 @@ async def answer(req: AnswerReq):
         d[f"{turn}_stored_time"] = remaining
         d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + 1
         # في هجوم خانة فارغة (لا مدافع): إجابة صحيحة = فوز فوري
-        if d.get("defender_id") is None:
+        if is_solo:
             finish_duel(game, None)  # لا خاسر، المهاجم يفوز
             touch(game)
             return {"ok": True, "correct": True}
@@ -755,7 +753,12 @@ async def answer(req: AnswerReq):
         touch(game)
         return {"ok": True, "correct": True, "switched": True}
     else:
-        # إجابة خاطئة = تمرير: خصم 3 ثوانٍ + سؤال جديد، الدور يبقى
+        # خانة فارغة: إجابة خاطئة = المهاجم يخسر المحاولة (لا استيلاء)، بلا خصم وقت
+        if is_solo:
+            finish_duel(game, d["attacker_id"])  # المهاجم خسر الخانة الفارغة
+            touch(game)
+            return {"ok": True, "correct": False}
+        # مبارزة: إجابة خاطئة = تمرير: خصم 3 ثوانٍ + سؤال جديد، الدور يبقى
         new_remaining = max(0.0, remaining - 3.0)
         d[f"{turn}_stored_time"] = new_remaining
         d["turn_start_ts"] = now_sec

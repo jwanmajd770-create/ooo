@@ -101,6 +101,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     : sharedRem;
   const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : sharedRem) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
+  const isSolo = !duel.defender_id;  // خانة فارغة: لا عدّاد تنازلي
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
@@ -116,17 +117,17 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
           <div className="text-right">
             <div className="text-xs text-gray-500">المهاجم</div>
             <div className={`font-bold ${duel.turn === 'attacker' ? 'pulse-glow' : ''}`} style={{ color: attacker?.color }}>{attacker?.icon} {attacker?.name}</div>
-            <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'attacker' ? 'text-white' : 'text-gray-400'}`} data-testid="attacker-timer">{Math.ceil(attRem)}</div>
+            {!isSolo && <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'attacker' ? 'text-white' : 'text-gray-400'}`} data-testid="attacker-timer">{Math.ceil(attRem)}</div>}
           </div>
           <div className="flex flex-col items-center">
-            <div className={`px-3 py-1 rounded-full text-xs font-bold ${duel.turn === 'attacker' ? 'bg-cyan-400 text-black' : 'bg-gray-700 text-white'}`}>{duel.turn === 'attacker' ? 'دور المهاجم' : duel.turn === 'defender' ? 'دور المدافع' : 'مبارزة'}</div>
+            <div className={`px-3 py-1 rounded-full text-xs font-bold ${duel.turn === 'attacker' ? 'bg-cyan-400 text-black' : 'bg-gray-700 text-white'}`}>{isSolo ? 'غزو خانة فارغة' : (duel.turn === 'attacker' ? 'دور المهاجم' : duel.turn === 'defender' ? 'دور المدافع' : 'مبارزة')}</div>
           </div>
           <div className="text-left">
             <div className="text-xs text-gray-500">{defender ? "المدافع" : "غزو أرض"}</div>
             <div className={`font-bold ${duel.turn === 'defender' ? 'pulse-glow' : ''}`} style={{ color: defender?.color || "#39FF14" }}>
               {defender ? `${defender.icon} ${defender.name}` : "🏳️ خانة فارغة"}
             </div>
-            <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'defender' ? 'text-white' : 'text-gray-400'}`} data-testid="defender-timer">{Math.ceil(defRem)}</div>
+            <div className={`text-4xl font-black tabular mt-2 ${duel.turn === 'defender' ? 'text-white' : 'text-gray-400'}`} data-testid="defender-timer">{isSolo ? '' : Math.ceil(defRem)}</div>
           </div>
         </div>
 
