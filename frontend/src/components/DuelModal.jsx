@@ -7,6 +7,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
+  const timerStartRef = useRef(null);
   const lastTickSec = useRef(null);
   const lastResolved = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -29,13 +30,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     }
     if (lastDuelStart.current !== duel.started_at && !duel.resolved) {
       lastDuelStart.current = duel.started_at;
+      timerStartRef.current = null; // سيُضبط عند انتهاء العدّ التمهيدي
       sfx.resume();
       sfx.countdown();
       setCountdown(3);
       const t1 = setTimeout(() => setCountdown(2), 1000);
       const t2 = setTimeout(() => setCountdown(1), 2000);
       const t3 = setTimeout(() => setCountdown("انطلق!"), 3000);
-      const t4 = setTimeout(() => setCountdown(null), 3800);
+      const t4 = setTimeout(() => { setCountdown(null); timerStartRef.current = Date.now() / 1000; }, 3800);
       return () => { [t1, t2, t3, t4].forEach(clearTimeout); };
     }
   }, [duel?.started_at, duel?.resolved]);
@@ -75,11 +77,17 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const showResult = duel.resolved;
   const correct = showResult ? duel.question.a : null;
   const nowSec = Date.now() / 1000;
-  // نظام المؤقّت الموحّد: احسب الوقت المتبقي من started_at و timeout_ms
+  // نظام المؤقّت الموحّد: العدّاد يبدأ بعد انتهاء العدّ التمهيدي (3-2-1-انطلق)
   const isTurnBased = duel.turn === "attacker" || duel.turn === "defender";
   const totalSec = (duel.timeout_ms ? duel.timeout_ms : duelTimeoutMs) / 1000;
-  const startedSec = duel.started_at ? duel.started_at / 1000 : nowSec;
-  const sharedRem = Math.max(0, totalSec - (nowSec - startedSec));
+  // إذا فات العدّ التمهيدي (انضمام متأخر/إعادة تحميل) استخدم started_at من السيرفر
+  if (timerStartRef.current === null && countdown === null && duel.started_at) {
+    timerStartRef.current = duel.started_at / 1000 + 3.8;
+  }
+  const timerStart = timerStartRef.current;
+  const sharedRem = (countdown !== null || timerStart === null)
+    ? totalSec
+    : Math.max(0, totalSec - (nowSec - timerStart));
   const attStored = duel.attacker_stored_time ?? totalSec;
   const defStored = duel.defender_stored_time ?? totalSec;
   const attRem = isTurnBased

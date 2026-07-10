@@ -33,7 +33,7 @@ api_router = APIRouter(prefix="/api")
 GAMES: Dict[str, dict] = {}
 
 GRID_SIZE = 6
-DUEL_TIMEOUT_MS = 12000
+DUEL_TIMEOUT_MS = 30000
 FAST_DUEL_TIMEOUT_MS = 6000
 MAX_SPECTATORS = 100
 ROOM_TTL_MS = 6 * 60 * 60 * 1000        # any room dies after 6h
