@@ -43,7 +43,7 @@ export default function HostRoom() {
         setAgoraTrack(track);
         setIsTalking(true);
       } catch (err) {
-        console.error("[voice] Host mic error:", err);
+        console.error("Host mic error:", err);
         alert("تأكد من السماح بالمايكروفون");
       }
     } else {
