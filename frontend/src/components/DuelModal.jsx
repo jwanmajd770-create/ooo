@@ -11,6 +11,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const lastResolved = useRef(false);
   const [busy, setBusy] = useState(false);
   const [wrongIdx, setWrongIdx] = useState(null);
+  const [, setTick] = useState(0);
+
+  // إعادة الرسم كل ربع ثانية ليتحرك العدّاد
+  useEffect(() => {
+    if (!duel || duel.resolved) return;
+    const iv = setInterval(() => setTick((t) => t + 1), 250);
+    return () => clearInterval(iv);
+  }, [duel?.started_at, duel?.resolved]);
 
   // countdown 3-2-1 when a new duel appears
   useEffect(() => {
@@ -67,11 +75,20 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const showResult = duel.resolved;
   const correct = showResult ? duel.question.a : null;
   const nowSec = Date.now() / 1000;
-  const attStored = duel.attacker_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
-  const defStored = duel.defender_stored_time ?? (duel.timeout_ms ? duel.timeout_ms / 1000 : duelTimeoutMs / 1000);
-  const attRem = duel.turn === "attacker" ? Math.max(0, attStored - (nowSec - (duel.turn_start_ts || nowSec))) : attStored;
-  const defRem = duel.turn === "defender" ? Math.max(0, defStored - (nowSec - (duel.turn_start_ts || nowSec))) : defStored;
-  const danger = (duel.turn === "attacker" ? attRem : defRem) <= 3 && !showResult;
+  // نظام المؤقّت الموحّد: احسب الوقت المتبقي من started_at و timeout_ms
+  const isTurnBased = duel.turn === "attacker" || duel.turn === "defender";
+  const totalSec = (duel.timeout_ms ? duel.timeout_ms : duelTimeoutMs) / 1000;
+  const startedSec = duel.started_at ? duel.started_at / 1000 : nowSec;
+  const sharedRem = Math.max(0, totalSec - (nowSec - startedSec));
+  const attStored = duel.attacker_stored_time ?? totalSec;
+  const defStored = duel.defender_stored_time ?? totalSec;
+  const attRem = isTurnBased
+    ? (duel.turn === "attacker" ? Math.max(0, attStored - (nowSec - (duel.turn_start_ts || nowSec))) : attStored)
+    : sharedRem;
+  const defRem = isTurnBased
+    ? (duel.turn === "defender" ? Math.max(0, defStored - (nowSec - (duel.turn_start_ts || nowSec))) : defStored)
+    : sharedRem;
+  const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : sharedRem) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
 
   return (
@@ -129,7 +146,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                 <button
                   key={i}
                   data-testid={`answer-${i}`}
-                  disabled={!amInvolved || showResult || isHiddenByEye || (duel.turn ? duel.turn !== myRole : alreadyAnswered) || busy}
+                  disabled={!amInvolved || showResult || isHiddenByEye || (isTurnBased ? duel.turn !== myRole : alreadyAnswered) || busy}
                   onClick={async () => {
                     if (busy) return;
                     setBusy(true);
