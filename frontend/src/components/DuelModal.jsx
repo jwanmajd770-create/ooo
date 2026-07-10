@@ -90,11 +90,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     : Math.max(0, totalSec - (nowSec - timerStart));
   const attStored = duel.attacker_stored_time ?? totalSec;
   const defStored = duel.defender_stored_time ?? totalSec;
+  // أثناء العدّ التمهيدي (3-2-1) العدّاد ثابت على الرصيد المخزّن
+  const introActive = countdown !== null;
+  const turnElapsed = introActive ? 0 : Math.max(0, nowSec - (duel.turn_start_ts || nowSec));
   const attRem = isTurnBased
-    ? (duel.turn === "attacker" ? Math.max(0, attStored - (nowSec - (duel.turn_start_ts || nowSec))) : attStored)
+    ? (duel.turn === "attacker" ? Math.max(0, attStored - turnElapsed) : attStored)
     : sharedRem;
   const defRem = isTurnBased
-    ? (duel.turn === "defender" ? Math.max(0, defStored - (nowSec - (duel.turn_start_ts || nowSec))) : defStored)
+    ? (duel.turn === "defender" ? Math.max(0, defStored - turnElapsed) : defStored)
     : sharedRem;
   const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : sharedRem) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
