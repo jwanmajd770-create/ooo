@@ -911,3 +911,15 @@ for _cat, _qs in _NEW_QUESTIONS.items():
         EXTRA_QUESTIONS[_cat].extend(_qs)
     else:
         EXTRA_QUESTIONS[_cat] = _qs
+  
+
+# إضافة الفئات السبع لـ EXTRA_CATEGORIES
+EXTRA_CATEGORIES.extend([
+    {"id": "seerah", "name": "السيرة النبوية", "icon": "☪️", "color": "#1B5E20"},
+    {"id": "prophets", "name": "قصص الأنبياء", "icon": "📿", "color": "#4A148C"},
+    {"id": "world_history", "name": "تاريخ العالم", "icon": "🌐", "color": "#B71C1C"},
+    {"id": "saudi_history", "name": "تاريخ المملكة العربية السعودية", "icon": "🟢", "color": "#006C35"},
+    {"id": "general_knowledge", "name": "معلومات عامة", "icon": "💡", "color": "#F57F17"},
+    {"id": "arabic_culture", "name": "ثقافة عربية", "icon": "🏺", "color": "#E65100"},
+    {"id": "who_said", "name": "من القائل؟", "icon": "💬", "color": "#01579B"},
+])
