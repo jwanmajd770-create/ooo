@@ -95,26 +95,47 @@ def can_attack(game, attacker_id, target_r, target_c):
     return False
 
 
-def get_random_question(category_id, custom_questions=None, force_image=False):
+def _pick_avoiding_repeats(pool, asked_set, key_fn):
+    """يختار عنصراً لم يُطرح مؤخراً؛ إذا استُنفدت كلها يعيد التدوير."""
+    if not pool:
+        return None
+    fresh = [x for x in pool if key_fn(x) not in asked_set]
+    if not fresh:
+        # استُنفدت كل الأسئلة: صفّر الذاكرة لهذه الفئة وأعد التدوير
+        for x in pool:
+            asked_set.discard(key_fn(x))
+        fresh = pool
+    chosen = random.choice(fresh)
+    asked_set.add(key_fn(chosen))
+    return chosen
+
+
+def get_random_question(category_id, custom_questions=None, force_image=False, game=None):
     imgs = IMAGE_QUESTIONS.get(category_id, [])
     quotes = QUOTE_QUESTIONS.get(category_id, [])
     customs = (custom_questions or {}).get(category_id, [])
+    # ذاكرة الأسئلة المطروحة لكل غرفة (تمنع التكرار السريع)
+    asked = None
+    if game is not None:
+        asked = game.setdefault("_asked_questions", {}).setdefault(category_id, set())
+
+    def _q_key(q):
+        return q.get("q", "") if isinstance(q, dict) else str(q)
+
     if force_image and imgs:
-        return random.choice(imgs)
+        return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
     if imgs and random.random() < 0.25:
-        return random.choice(imgs)
-    # 15% quote if available
+        return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
     if quotes and random.random() < 0.15:
-        return random.choice(quotes)
-    # 20% custom if available
+        return _pick_avoiding_repeats(quotes, asked, _q_key) if asked is not None else random.choice(quotes)
     if customs and random.random() < 0.20:
-        return random.choice(customs)
+        return _pick_avoiding_repeats(customs, asked, _q_key) if asked is not None else random.choice(customs)
     qs = QUESTIONS.get(category_id, [])
     if not qs:
         if imgs:
-            return random.choice(imgs)
+            return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
         return None
-    return random.choice(qs)
+    return _pick_avoiding_repeats(qs, asked, _q_key) if asked is not None else random.choice(qs)
 
 
 def next_turn(game):
@@ -594,7 +615,7 @@ async def attack(req: AttackReq):
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
-    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
@@ -747,7 +768,7 @@ async def answer(req: AnswerReq):
         d["turn"] = other
         d["turn_start_ts"] = now_sec
         newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"))
+                                   force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
             d["question"] = newq
         touch(game)
@@ -767,7 +788,7 @@ async def answer(req: AnswerReq):
             touch(game)
             return {"ok": True, "correct": False, "timed_out": True}
         newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"))
+                                   force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
             d["question"] = newq
         touch(game)
@@ -797,7 +818,7 @@ async def use_powerup(req: PowerUpReq):
         opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
         if opp_answer is not None:
             raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"))
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None

@@ -4478,3 +4478,10 @@ for _c in EXTRA_CATEGORIES:
 for _cid, _qs in EXTRA_QUESTIONS.items():
     QUESTIONS.setdefault(_cid, [])
     QUESTIONS[_cid].extend(_qs)
+
+
+# ===== دمج أسئلة الوضع الكلاسيكي الإضافية (خليط المستويات) =====
+from classic_extra import CLASSIC_EXTRA
+for _cid, _qs in CLASSIC_EXTRA.items():
+    QUESTIONS.setdefault(_cid, [])
+    QUESTIONS[_cid].extend(_qs)
