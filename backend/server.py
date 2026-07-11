@@ -873,7 +873,58 @@ async def next_turn_ep(req: NextTurnReq):
     return {"ok": True}
 
 
-@api_router.post("/rooms/custom_question")
+class KickReq(BaseModel):
+    code: str
+    host_token: str
+    player_id: str
+
+
+@api_router.post("/rooms/kick")
+async def kick_player(req: KickReq):
+    """المقدم يطرد لاعباً — يُزال من الغرفة نهائياً"""
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    if game["host_token"] != req.host_token:
+        raise HTTPException(403)
+    before = len(game["players"])
+    game["players"] = [p for p in game["players"] if p["id"] != req.player_id]
+    if len(game["players"]) == before:
+        raise HTTPException(404, "اللاعب غير موجود")
+    # لو كانت مبارزة جارية معه، أنهِها
+    d = game.get("duel")
+    if d and not d.get("resolved") and req.player_id in (d.get("attacker_id"), d.get("defender_id")):
+        game["duel"] = None
+        game["pending_action"] = None
+        game["state"] = "active"
+    touch(game)
+    return {"ok": True, "kicked": req.player_id}
+
+
+class MuteReq(BaseModel):
+    code: str
+    host_token: str
+    player_id: str
+    mute: bool  # True=كتم، False=فك الكتم
+
+
+@api_router.post("/rooms/mute")
+async def mute_player(req: MuteReq):
+    """المقدم يكتم أو يفكّ كتم صوت لاعب"""
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    if game["host_token"] != req.host_token:
+        raise HTTPException(403)
+    player = next((p for p in game["players"] if p["id"] == req.player_id), None)
+    if not player:
+        raise HTTPException(404, "اللاعب غير موجود")
+    player["muted_by_host"] = req.mute
+    touch(game)
+    return {"ok": True, "player_id": req.player_id, "muted": req.mute}
+
+
+
 async def add_custom_question(req: CustomQuestionReq):
     game = GAMES.get(req.code)
     if not game:

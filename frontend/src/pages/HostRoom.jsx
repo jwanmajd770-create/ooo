@@ -19,6 +19,24 @@ export default function HostRoom() {
   const [isTalking, setIsTalking] = useState(false);
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
+  const [mutedPlayers, setMutedPlayers] = useState({});
+
+  const kickPlayer = async (playerId, playerName) => {
+    if (!window.confirm(`طرد اللاعب "${playerName}" من الغرفة؟`)) return;
+    try {
+      await api.kick(code, hostToken, playerId);
+      toast.success(`تم طرد ${playerName}`);
+    } catch { toast.error("فشل الطرد"); }
+  };
+
+  const toggleMute = async (playerId, playerName) => {
+    const nowMuted = !mutedPlayers[playerId];
+    try {
+      await api.mute(code, hostToken, playerId, nowMuted);
+      setMutedPlayers(prev => ({ ...prev, [playerId]: nowMuted }));
+      toast.success(nowMuted ? `تم كتم ${playerName}` : `تم فك كتم ${playerName}`);
+    } catch { toast.error("فشل الكتم"); }
+  };
 
   const toggleTalk = async () => {
     if (!isTalking) {
@@ -131,11 +149,25 @@ export default function HostRoom() {
             <p className="text-gray-400 mb-4 text-sm">شارك الرمز <span className="neon-cyan font-black text-lg tabular">{code}</span> مع اللاعبين. الحد الأدنى 2 لاعبين.</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {state.players.map((p) => (
-                <div key={p.id} className="p-3 rounded-lg border-2 flex items-center gap-2" style={{ borderColor: p.color, background: p.color + "15" }}>
-                  <span className="text-2xl">{p.icon}</span>
-                  <div>
-                    <div className="font-bold">{p.name}</div>
-                    <div className="text-xs opacity-70">{p.category_name}</div>
+                <div key={p.id} className="p-3 rounded-lg border-2" style={{ borderColor: p.color, background: p.color + "15" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">{p.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold truncate">{p.name}</div>
+                      <div className="text-xs opacity-70">{p.category_name}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => toggleMute(p.id, p.name)}
+                      className={`flex-1 text-xs py-1 rounded transition-all ${mutedPlayers[p.id] ? 'bg-yellow-400 text-black' : 'bg-white/10 hover:bg-white/20'}`}
+                      title={mutedPlayers[p.id] ? "فك الكتم" : "كتم الصوت"}
+                    >{mutedPlayers[p.id] ? "🔈 مكتوم" : "🔇 كتم"}</button>
+                    <button
+                      onClick={() => kickPlayer(p.id, p.name)}
+                      className="flex-1 text-xs py-1 rounded bg-red-500/20 hover:bg-red-500/40 text-red-400 transition-all"
+                      title="طرد من الغرفة"
+                    >❌ طرد</button>
                   </div>
                 </div>
               ))}
