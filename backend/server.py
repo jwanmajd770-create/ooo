@@ -66,23 +66,25 @@ def now_ms() -> int:
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
-def neighbors(r, c):
+def neighbors(r, c, gs=6):
     result = []
     for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
         nr, nc = r + dr, c + dc
-        if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE:
+        if 0 <= nr < gs and 0 <= nc < gs:
             result.append((nr, nc))
     return result
 
 
 def find_free_cell(game):
-    cells = [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE) if game["grid"][r][c] is None]
+    gs = game.get("grid_size", 6)
+    cells = [(r, c) for r in range(gs) for c in range(gs) if game["grid"][r][c] is None]
     random.shuffle(cells)
     return cells[0] if cells else None
 
 
 def player_cells(game, pid):
-    return [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE) if game["grid"][r][c] == pid]
+    gs = game.get("grid_size", 6)
+    return [(r, c) for r in range(gs) for c in range(gs) if game["grid"][r][c] == pid]
 
 
 def can_attack(game, attacker_id, target_r, target_c):
@@ -90,7 +92,7 @@ def can_attack(game, attacker_id, target_r, target_c):
     if target == attacker_id:
         return False
     for r, c in player_cells(game, attacker_id):
-        if (target_r, target_c) in neighbors(r, c):
+        if (target_r, target_c) in neighbors(r, c, game.get("grid_size", 6)):
             return True
     return False
 
@@ -213,15 +215,17 @@ def finish_duel(game, loser_id):
                     break
         # الاستحواذ الكامل على أرض الخاسر (المدافع)
         if dfn is not None and loser_id == dfn:
-            for r in range(GRID_SIZE):
-                for c in range(GRID_SIZE):
+            _gs = game.get("grid_size", 6)
+            for r in range(_gs):
+                for c in range(_gs):
                     if game["grid"][r][c] == dfn:
                         game["grid"][r][c] = att
             eliminate_check(game, dfn)
     elif winner_id == dfn and dfn is not None:
         # المدافع يفوز: يستحوذ على أرض المهاجم الخاسر
-        for r in range(GRID_SIZE):
-            for c in range(GRID_SIZE):
+        _gs = game.get("grid_size", 6)
+        for r in range(_gs):
+            for c in range(_gs):
                 if game["grid"][r][c] == att:
                     game["grid"][r][c] = dfn
         defender = next(p for p in game["players"] if p["id"] == dfn)
@@ -279,7 +283,7 @@ def public_game(game):
         "code": game["code"],
         "state": game["state"],
         "grid": game["grid"],
-        "grid_size": GRID_SIZE,
+        "grid_size": game.get("grid_size", 6),
         "players": [{k: v for k, v in p.items() if k != "token"} for p in game["players"]],
         "spectators": game.get("spectators", []),
         "current_player": game.get("current_player"),
@@ -338,6 +342,7 @@ def public_game(game):
 class CreateRoomReq(BaseModel):
     host_name: str = "المقدم"
     mode: str = "classic"  # classic | flags_only
+    grid_size: int = 6  # 3-6 (9-36 مربع)
 
 
 class JoinReq(BaseModel):
@@ -452,12 +457,14 @@ async def create_room(req: CreateRoomReq):
     while code in GAMES:
         code = gen_pin()
     host_token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+    gs = max(3, min(6, req.grid_size))  # 3-6
     GAMES[code] = {
         "code": code,
         "state": "lobby",
         "host_token": host_token,
         "host_name": req.host_name,
-        "grid": [[None for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)],
+        "grid_size": gs,
+        "grid": [[None for _ in range(gs)] for _ in range(gs)],
         "players": [],
         "spectators": [],
         "current_player": None,
@@ -565,6 +572,30 @@ async def get_state(code: str, token: Optional[str] = None):
     return g
 
 
+
+
+class SetGridSizeReq(BaseModel):
+    code: str
+    host_token: str
+    grid_size: int  # 3-6
+
+
+@api_router.post("/rooms/set_grid_size")
+async def set_grid_size(req: SetGridSizeReq):
+    """المقدم يغيّر حجم الشبكة قبل بدء اللعبة"""
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    if game["host_token"] != req.host_token:
+        raise HTTPException(403)
+    if game["state"] != "lobby":
+        raise HTTPException(400, "لا يمكن تغيير الحجم بعد بدء اللعبة")
+    gs = max(3, min(6, req.grid_size))
+    game["grid_size"] = gs
+    game["grid"] = [[None for _ in range(gs)] for _ in range(gs)]
+    touch(game)
+    return {"ok": True, "grid_size": gs}
+
 @api_router.post("/rooms/start")
 async def start_game(req: StartGameReq):
     game = GAMES.get(req.code)
@@ -597,7 +628,8 @@ async def attack(req: AttackReq):
         raise HTTPException(400, "اللعبة ليست في مرحلة الهجوم")
     if game["current_player"] != me["id"]:
         raise HTTPException(400, "ليس دورك")
-    if not (0 <= req.row < GRID_SIZE and 0 <= req.col < GRID_SIZE):
+    _gs = game.get("grid_size", 6)
+    if not (0 <= req.row < _gs and 0 <= req.col < _gs):
         raise HTTPException(400, "خانة خارج الحدود")
     if not can_attack(game, me["id"], req.row, req.col):
         raise HTTPException(400, "يجب أن تكون الخانة مجاورة لأرضك")
@@ -919,8 +951,9 @@ async def kick_player(req: KickReq):
             game["winner"] = winner
         else:
             # أكثر من لاعب → مربعات المطرود تصبح فارغة
-            for r in range(GRID_SIZE):
-                for c in range(GRID_SIZE):
+            _gs = game.get("grid_size", 6)
+            for r in range(_gs):
+                for c in range(_gs):
                     if game["grid"][r][c] == req.player_id:
                         game["grid"][r][c] = None
             game["players"] = [p for p in game["players"] if p["id"] != req.player_id]
