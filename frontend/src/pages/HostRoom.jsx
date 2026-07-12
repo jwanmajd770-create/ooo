@@ -190,8 +190,23 @@ export default function HostRoom() {
                 shields={shields}
               />
             </div>
-            <div>
+            <div className="flex flex-col gap-3">
               <Leaderboard players={state.players} currentPlayer={state.current_player} />
+              <div className="card-dark p-3">
+                <div className="text-xs text-gray-400 mb-2 font-bold">إدارة اللاعبين</div>
+                {state.players.filter(p => !p.is_bot).map((p) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span>{p.icon}</span>
+                      <span className="text-sm truncate">{p.name}</span>
+                    </div>
+                    <button
+                      onClick={() => kickPlayer(p.id, p.name)}
+                      className="text-xs px-2 py-1 rounded bg-red-500/20 hover:bg-red-500/40 text-red-400 whitespace-nowrap"
+                    >❌ طرد</button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
