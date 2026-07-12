@@ -293,6 +293,12 @@ def public_game(game):
         "duel": None,
         "last_action": game.get("last_action"),
         "sudden_death": game.get("sudden_death", False),
+        "final_duel": {
+            "active": game.get("final_duel_active", False),
+            "round": game.get("final_duel_round", 0),
+            "scores": game.get("final_duel_scores", {}),
+            "players": game.get("final_duel_players", []),
+        } if game.get("final_duel_active") else None,
         "duel_timeout_ms": FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS,
         "mode": game.get("mode", "classic"),
     }
@@ -648,6 +654,25 @@ async def attack(req: AttackReq):
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
+
+    # المبارزة النهائية: تحديد الفئة حسب الجولة
+    if game.get("final_duel_active") and game.get("mode") != "flags_only":
+        fd_round = game.get("final_duel_round", 0)
+        fd_players = game.get("final_duel_players", [])
+        alive = [p for p in game["players"] if not p["eliminated"]]
+        if len(fd_players) == 2:
+            p0 = next((p for p in game["players"] if p["id"] == fd_players[0]), None)
+            p1 = next((p for p in game["players"] if p["id"] == fd_players[1]), None)
+            if fd_round == 0 and p0:
+                category = p0["category_id"]
+            elif fd_round == 1 and p1:
+                category = p1["category_id"]
+            else:
+                # جولة عشوائية
+                import random as _r
+                all_cats = [c["id"] for c in CATEGORIES if c["id"] not in ("football",)]
+                category = _r.choice(all_cats) if all_cats else category
+
     question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
@@ -752,6 +777,44 @@ def resolve_duel_if_ready(game):
                 asyncio.create_task(save_game_result(db, game))
             except Exception:
                 pass
+    elif len(alive) == 2 and not game.get("final_duel_active"):
+        # المبارزة النهائية: لاعبان فقط → 3 جولات حاسمة
+        game["final_duel_active"] = True
+        game["final_duel_round"] = 0  # 0=فئة A، 1=فئة B، 2=عشوائية
+        game["final_duel_scores"] = {alive[0]["id"]: 0, alive[1]["id"]: 0}
+        game["final_duel_players"] = [alive[0]["id"], alive[1]["id"]]
+
+    # تحديث نقاط المبارزة النهائية
+    if game.get("final_duel_active") and winner_id:
+        fd_scores = game.get("final_duel_scores", {})
+        if winner_id in fd_scores:
+            fd_scores[winner_id] = fd_scores.get(winner_id, 0) + 1
+        fd_round = game.get("final_duel_round", 0)
+        game["final_duel_round"] = fd_round + 1
+        # تحقق: هل فاز أحد بجولتين أو انتهت الجولات الثلاث
+        fd_players = game.get("final_duel_players", [])
+        if fd_players:
+            s0 = fd_scores.get(fd_players[0], 0)
+            s1 = fd_scores.get(fd_players[1], 0)
+            total_rounds = fd_round + 1
+            fd_winner = None
+            if s0 >= 2:
+                fd_winner = fd_players[0]
+            elif s1 >= 2:
+                fd_winner = fd_players[1]
+            elif total_rounds >= 3:
+                fd_winner = fd_players[0] if s0 > s1 else (fd_players[1] if s1 > s0 else None)
+            if fd_winner:
+                game["state"] = "finished"
+                game["winner"] = fd_winner
+                game["final_duel_active"] = False
+                if not game.get("_stats_saved"):
+                    game["_stats_saved"] = True
+                    import asyncio
+                    try:
+                        asyncio.create_task(save_game_result(db, game))
+                    except Exception:
+                        pass
 
     game["pending_action"] = {"type": "duel_review", "until": now + 3800}
 
