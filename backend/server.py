@@ -542,46 +542,7 @@ async def get_state(code: str, token: Optional[str] = None):
             game["pending_action"] = None
             if game["state"] != "finished":
                 next_turn(game)
-    # bot turn: لو اللاعب الحالي بوت، يهاجم تلقائياً بعد ثانية
-    if game.get("state") == "active" and not game.get("duel") and not game.get("pending_action"):
-        cur_id = game.get("current_player")
-        cur = next((p for p in game["players"] if p["id"] == cur_id), None)
-        if cur and cur.get("is_bot") and not cur.get("eliminated"):
-            bot_last = game.get("_bot_turn_started")
-            if bot_last is None:
-                game["_bot_turn_started"] = now_ms()
-            elif now_ms() - bot_last > 1500:  # بعد 1.5 ثانية
-                game["_bot_turn_started"] = None
-                # اختر خانة مجاورة عشوائية
-                attackable = [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE)
-                              if can_attack(game, cur_id, r, c)]
-                if attackable:
-                    r, c = random.choice(attackable)
-                    target_owner = game["grid"][r][c]
-                    if target_owner and target_owner != cur_id:
-                        defender = next((p for p in game["players"] if p["id"] == target_owner), None)
-                        category = cur.get("category_id", "science")
-                        question = get_random_question(category, None, game=game)
-                        if question:
-                            bot_ans = random.randint(0, len(question.get("opts", [])) - 1)
-                            correct = question.get("a", 0)
-                            if bot_ans == correct:
-                                game["grid"][r][c] = cur_id
-                            next_turn(game)
-                        else:
-                            next_turn(game)
-                    else:
-                        # خانة فارغة
-                        category = cur.get("category_id", "science")
-                        question = get_random_question(category, None, game=game)
-                        if question:
-                            bot_ans = random.randint(0, len(question.get("opts", [])) - 1)
-                            correct = question.get("a", 0)
-                            if bot_ans == correct:
-                                game["grid"][r][c] = cur_id
-                        next_turn(game)
-                else:
-                    next_turn(game)
+
     g = public_game(game)
     if token:
         me_full = next((p for p in game["players"] if p["token"] == token), None)
@@ -921,7 +882,7 @@ class KickReq(BaseModel):
 
 @api_router.post("/rooms/kick")
 async def kick_player(req: KickReq):
-    """المقدم يطرد لاعباً — في اللوبي يُحذف، أثناء اللعب يتحول لبوت"""
+    """المقدم يطرد لاعباً"""
     game = GAMES.get(req.code)
     if not game:
         raise HTTPException(404)
@@ -935,39 +896,40 @@ async def kick_player(req: KickReq):
         # في اللوبي: احذف اللاعب نهائياً
         game["players"] = [p for p in game["players"] if p["id"] != req.player_id]
     else:
-        # أثناء اللعب: حوّل لبوت
-        player["is_bot"] = True
-        player["name"] = f"🤖 {player['name']}"
-        # لو كانت مبارزة جارية معه، البوت يجيب عشوائياً
+        # أثناء اللعب
+        alive = [p for p in game["players"] if not p.get("eliminated")]
+        alive_others = [p for p in alive if p["id"] != req.player_id]
+
+        # أنهِ أي مبارزة جارية مع المطرود
         d = game.get("duel")
         if d and not d.get("resolved") and req.player_id in (d.get("attacker_id"), d.get("defender_id")):
-            q = d.get("question", {})
-            opts = q.get("opts", [])
-            bot_ans = random.randint(0, len(opts) - 1) if opts else 0
-            correct = q.get("a", 0)
-            bot_correct = (bot_ans == correct)
-            attacker_id = d.get("attacker_id")
-            defender_id = d.get("defender_id")
+            # لو المطرود مهاجم → المدافع يكسب (الخانة تبقى)
+            # لو المطرود مدافع → المهاجم يكسب
             target = d.get("target")
-            if bot_correct:
-                if req.player_id == attacker_id:
-                    # البوت كان مهاجماً وأجاب صح
-                    if target:
-                        game["grid"][target[0]][target[1]] = req.player_id
-                else:
-                    # البوت كان مدافعاً وأجاب صح — المهاجم يخسر
-                    pass
-            else:
-                if req.player_id == attacker_id and target:
-                    pass  # المهاجم خسر، الخانة تبقى
-                elif req.player_id == defender_id and target:
-                    game["grid"][target[0]][target[1]] = attacker_id
+            if target and d.get("defender_id") == req.player_id:
+                game["grid"][target[0]][target[1]] = d.get("attacker_id")
             game["duel"] = None
             game["pending_action"] = None
-            next_turn(game)
+
+        if len(alive_others) <= 1:
+            # لاعب واحد متبقٍ → اللعبة تنتهي
+            game["players"] = [p for p in game["players"] if p["id"] != req.player_id]
+            winner = alive_others[0]["id"] if alive_others else None
+            game["state"] = "finished"
+            game["winner"] = winner
+        else:
+            # أكثر من لاعب → مربعات المطرود تصبح فارغة
+            for r in range(GRID_SIZE):
+                for c in range(GRID_SIZE):
+                    if game["grid"][r][c] == req.player_id:
+                        game["grid"][r][c] = None
+            game["players"] = [p for p in game["players"] if p["id"] != req.player_id]
+            # لو كان دوره، انتقل للتالي
+            if game.get("current_player") == req.player_id:
+                next_turn(game)
 
     touch(game)
-    return {"ok": True, "kicked": req.player_id, "as_bot": game["state"] != "lobby"}
+    return {"ok": True, "kicked": req.player_id}
 
 
 class MuteReq(BaseModel):
