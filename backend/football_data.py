@@ -2003,3 +2003,12 @@ FOOTBALL_QUESTIONS = {
         {"q": "من أول منتخب عربي يتأهل لكأس العالم؟", "opts": ["مصر", "المغرب", "تونس", "الجزائر"], "a": 0},
     ],
 }
+# -*- coding: utf-8 -*-
+# patch: يُضاف في نهاية football_data.py
+from football_extra import FOOTBALL_EXTRA
+
+for _cat_id, _qs in FOOTBALL_EXTRA.items():
+    if _cat_id in FOOTBALL_QUESTIONS:
+        FOOTBALL_QUESTIONS[_cat_id].extend(_qs)
+    else:
+        FOOTBALL_QUESTIONS[_cat_id] = _qs
