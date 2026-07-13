@@ -4494,3 +4494,19 @@ for _cat_id, _qs in CLASSIC_EXTRA2.items():
         QUESTIONS[_cat_id].extend(_qs)
     else:
         QUESTIONS[_cat_id] = _qs
+# -*- coding: utf-8 -*-
+from classic_extra4 import CLASSIC_EXTRA4
+
+for _cat_id, _qs in CLASSIC_EXTRA4.items():
+    if _cat_id in QUESTIONS:
+        QUESTIONS[_cat_id].extend(_qs)
+    else:
+        QUESTIONS[_cat_id] = _qs
+# -*- coding: utf-8 -*-
+from classic_extra4 import CLASSIC_EXTRA4
+
+for _cat_id, _qs in CLASSIC_EXTRA4.items():
+    if _cat_id in QUESTIONS:
+        QUESTIONS[_cat_id].extend(_qs)
+    else:
+        QUESTIONS[_cat_id] = _qs
