@@ -20,7 +20,12 @@ export default function HostRoom() {
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
   const [mutedPlayers, setMutedPlayers] = useState({});
-  const [gridSize, setGridSize] = useState(state?.grid_size || 6);
+  const [gridSize, setGridSize] = useState(6);
+
+  // sync gridSize مع state من السيرفر
+  useEffect(() => {
+    if (state?.grid_size) setGridSize(state.grid_size);
+  }, [state?.grid_size]);
 
   const changeGridSize = async (newSize) => {
     try {
