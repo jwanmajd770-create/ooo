@@ -4485,3 +4485,12 @@ from classic_extra import CLASSIC_EXTRA
 for _cid, _qs in CLASSIC_EXTRA.items():
     QUESTIONS.setdefault(_cid, [])
     QUESTIONS[_cid].extend(_qs)
+# -*- coding: utf-8 -*-
+# patch: يُضاف في نهاية questions.py
+from classic_extra2 import CLASSIC_EXTRA2
+
+for _cat_id, _qs in CLASSIC_EXTRA2.items():
+    if _cat_id in QUESTIONS:
+        QUESTIONS[_cat_id].extend(_qs)
+    else:
+        QUESTIONS[_cat_id] = _qs
