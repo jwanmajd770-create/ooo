@@ -348,7 +348,6 @@ def public_game(game):
 class CreateRoomReq(BaseModel):
     host_name: str = "المقدم"
     mode: str = "classic"  # classic | flags_only
-    grid_size: int = 6  # 3-6 (9-36 مربع)
 
 
 class JoinReq(BaseModel):
@@ -463,14 +462,13 @@ async def create_room(req: CreateRoomReq):
     while code in GAMES:
         code = gen_pin()
     host_token = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
-    gs = max(3, min(6, req.grid_size))  # 3-6
     GAMES[code] = {
         "code": code,
         "state": "lobby",
         "host_token": host_token,
         "host_name": req.host_name,
-        "grid_size": gs,
-        "grid": [[None for _ in range(gs)] for _ in range(gs)],
+        "grid_size": 6,
+        "grid": [[None for _ in range(6)] for _ in range(6)],
         "players": [],
         "spectators": [],
         "current_player": None,
@@ -580,28 +578,6 @@ async def get_state(code: str, token: Optional[str] = None):
 
 
 
-class SetGridSizeReq(BaseModel):
-    code: str
-    host_token: str
-    grid_size: int  # 3-6
-
-
-@api_router.post("/rooms/set_grid_size")
-async def set_grid_size(req: SetGridSizeReq):
-    """المقدم يغيّر حجم الشبكة قبل بدء اللعبة"""
-    game = GAMES.get(req.code)
-    if not game:
-        raise HTTPException(404)
-    if game["host_token"] != req.host_token:
-        raise HTTPException(403)
-    if game["state"] != "lobby":
-        raise HTTPException(400, "لا يمكن تغيير الحجم بعد بدء اللعبة")
-    gs = max(3, min(6, req.grid_size))
-    game["grid_size"] = gs
-    game["grid"] = [[None for _ in range(gs)] for _ in range(gs)]
-    touch(game)
-    return {"ok": True, "grid_size": gs}
-
 @api_router.post("/rooms/start")
 async def start_game(req: StartGameReq):
     game = GAMES.get(req.code)
@@ -611,10 +587,35 @@ async def start_game(req: StartGameReq):
         raise HTTPException(403)
     if len(game["players"]) < 2:
         raise HTTPException(400, "يجب أن يوجد لاعبان على الأقل")
-    for p in game["players"]:
-        cell = find_free_cell(game)
-        if cell:
-            game["grid"][cell[0]][cell[1]] = p["id"]
+    # توزيع اللاعبين على أطراف الشبكة بشكل متباعد
+    gs = game.get("grid_size", 6)
+    n = len(game["players"])
+    # مواقع ثابتة على أطراف الشبكة حسب عدد اللاعبين
+    corner_positions = [
+        (0, 0),           # زاوية علوية يسار
+        (gs-1, gs-1),     # زاوية سفلية يمين
+        (0, gs-1),        # زاوية علوية يمين
+        (gs-1, 0),        # زاوية سفلية يسار
+        (0, gs//2),       # منتصف أعلى
+        (gs-1, gs//2),    # منتصف أسفل
+        (gs//2, 0),       # منتصف يسار
+        (gs//2, gs-1),    # منتصف يمين
+    ]
+    used = set()
+    for i, p in enumerate(game["players"]):
+        # اختر موقعاً من القائمة غير مستخدم
+        placed = False
+        for pos in corner_positions:
+            if pos not in used and game["grid"][pos[0]][pos[1]] is None:
+                game["grid"][pos[0]][pos[1]] = p["id"]
+                used.add(pos)
+                placed = True
+                break
+        if not placed:
+            # fallback: خانة عشوائية
+            cell = find_free_cell(game)
+            if cell:
+                game["grid"][cell[0]][cell[1]] = p["id"]
     game["state"] = "active"
     game["turn_idx"] = -1
     next_turn(game)
