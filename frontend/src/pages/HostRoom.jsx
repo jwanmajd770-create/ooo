@@ -20,6 +20,19 @@ export default function HostRoom() {
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
   const [mutedPlayers, setMutedPlayers] = useState({});
+  const [gridSize, setGridSize] = useState(state?.grid_size || 6);
+
+  const changeGridSize = async (newSize) => {
+    try {
+      const BASE = import.meta.env.VITE_API_URL || "";
+      await fetch(`${BASE}/api/rooms/set_grid_size`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({code, host_token: hostToken, grid_size: newSize})
+      });
+      setGridSize(newSize);
+    } catch { toast.error("فشل تغيير الحجم"); }
+  };
 
   const kickPlayer = async (playerId, playerName) => {
     if (!window.confirm(`طرد اللاعب "${playerName}" من الغرفة؟`)) return;
@@ -172,6 +185,25 @@ export default function HostRoom() {
                 </div>
               ))}
               {state.players.length === 0 && <div className="text-gray-500 col-span-full text-center p-6">لم ينضم أحد بعد...</div>}
+            </div>
+            <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold">حجم الشبكة</span>
+                <span className="text-cyan-400 font-black text-lg">{gridSize}×{gridSize} = {gridSize*gridSize} مربع</span>
+              </div>
+              <input
+                type="range"
+                min="3" max="6" step="1"
+                value={gridSize}
+                onChange={(e) => changeGridSize(Number(e.target.value))}
+                className="w-full accent-cyan-400"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>3×3</span>
+                <span>4×4</span>
+                <span>5×5</span>
+                <span>6×6</span>
+              </div>
             </div>
             <div className="mt-4">
               <CustomQuestionForm code={code} hostToken={hostToken} />
