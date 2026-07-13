@@ -587,23 +587,23 @@ async def start_game(req: StartGameReq):
         raise HTTPException(403)
     if len(game["players"]) < 2:
         raise HTTPException(400, "يجب أن يوجد لاعبان على الأقل")
-    # توزيع اللاعبين على أطراف الشبكة بشكل متباعد
+    # توزيع اللاعبين في مواقع متقابلة قطرياً
+    # للاعبين: (0,0) و(5,5) — أقصى زاويتين
+    # للأربعة: الزوايا الأربع
+    # لأكثر: زوايا + منتصف الأضلاع
     gs = game.get("grid_size", 6)
-    n = len(game["players"])
-    # مواقع ثابتة على أطراف الشبكة حسب عدد اللاعبين
     corner_positions = [
+        (0, gs-1),        # زاوية علوية يمين (مربع 6 تقريباً)
+        (gs-1, 0),        # زاوية سفلية يسار (مربع 31 تقريباً)
         (0, 0),           # زاوية علوية يسار
         (gs-1, gs-1),     # زاوية سفلية يمين
-        (0, gs-1),        # زاوية علوية يمين
-        (gs-1, 0),        # زاوية سفلية يسار
-        (0, gs//2),       # منتصف أعلى
-        (gs-1, gs//2),    # منتصف أسفل
         (gs//2, 0),       # منتصف يسار
         (gs//2, gs-1),    # منتصف يمين
+        (0, gs//2),       # منتصف أعلى
+        (gs-1, gs//2),    # منتصف أسفل
     ]
     used = set()
     for i, p in enumerate(game["players"]):
-        # اختر موقعاً من القائمة غير مستخدم
         placed = False
         for pos in corner_positions:
             if pos not in used and game["grid"][pos[0]][pos[1]] is None:
@@ -612,7 +612,6 @@ async def start_game(req: StartGameReq):
                 placed = True
                 break
         if not placed:
-            # fallback: خانة عشوائية
             cell = find_free_cell(game)
             if cell:
                 game["grid"][cell[0]][cell[1]] = p["id"]
