@@ -118,6 +118,10 @@ def _pick_avoiding_repeats(pool, asked_set, key_fn):
     return chosen
 
 
+def _duel_force_image(category_id, game):
+    return (game.get("mode") == "flags_only") or category_id in {"players_img", "actors_img"}
+
+
 def get_random_question(category_id, custom_questions=None, force_image=False, game=None):
     imgs = IMAGE_QUESTIONS.get(category_id, [])
     quotes = QUOTE_QUESTIONS.get(category_id, [])
@@ -679,11 +683,11 @@ async def attack(req: AttackReq):
                 all_cats = [c["id"] for c in CATEGORIES if c["id"] not in ("football",)]
                 category = _r.choice(all_cats) if all_cats else category
 
-    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+    question = get_random_question(category, game.get("custom_questions"), force_image=_duel_force_image(category, game), game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
-    bank_sec = timeout / 1000.0  # رصيد كل لاعب بالثواني
+    bank_sec = DUEL_TIMEOUT_MS / 1000.0  # رصيد كل لاعب بالثواني
     now = now_ms()
     game["duel"] = {
         "attacker_id": me["id"],
@@ -867,10 +871,11 @@ async def answer(req: AnswerReq):
             return {"ok": True, "correct": True}
         # بدّل الدور للخصم بسؤال جديد
         other = "defender" if turn == "attacker" else "attacker"
+        d[f"{other}_stored_time"] = d.get(f"{other}_stored_time", 0.0) + remaining
         d["turn"] = other
         d["turn_start_ts"] = now_sec
         newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"), game=game)
+                                   force_image=_duel_force_image(d["category"], game), game=game)
         if newq:
             d["question"] = newq
         touch(game)
@@ -920,7 +925,7 @@ async def use_powerup(req: PowerUpReq):
         opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
         if opp_answer is not None:
             raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=_duel_force_image(d["category"], game), game=game)
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None
