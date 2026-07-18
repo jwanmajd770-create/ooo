@@ -4535,6 +4535,12 @@ for _cat_id, _qs in CLASSIC_EXTRA3.items():
     else:
         QUESTIONS[_cat_id] = _dedupe_questions(_qs)
 
+from image_questions import IMAGE_QUESTIONS
+for _cat, _qs in IMAGE_QUESTIONS.items():
+    if _cat in QUESTIONS:
+        QUESTIONS[_cat].extend(_qs)
+    else:
+        QUESTIONS[_cat] = _qs
 
 for _cat_id, _qs in GEMINI_EXTRA.items():
     if _cat_id in QUESTIONS:
