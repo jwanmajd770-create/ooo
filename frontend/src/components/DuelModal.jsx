@@ -21,7 +21,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     return () => clearInterval(iv);
   }, [duel?.started_at, duel?.resolved]);
 
-  // countdown 5-4-3-2-1 when a new duel appears
+  // Separate intro logic for empty-square claims vs player-vs-player duels
   useEffect(() => {
     if (!duel) {
       lastDuelStart.current = null;
@@ -30,9 +30,26 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     }
     if (lastDuelStart.current !== duel.started_at && !duel.resolved) {
       lastDuelStart.current = duel.started_at;
-      timerStartRef.current = null; // سيُضبط عند انتهاء العدّ التمهيدي
+      timerStartRef.current = null;
       sfx.resume();
-      sfx.dramaticTension();
+
+      const isSolo = !duel.defender_id;
+      if (isSolo) {
+        setCountdown(3);
+        const t1 = setTimeout(() => setCountdown(2), 1000);
+        const t2 = setTimeout(() => setCountdown(1), 2000);
+        const t3 = setTimeout(() => {
+          sfx.duelStart();
+          setCountdown("انطلق!");
+        }, 3000);
+        const t4 = setTimeout(() => {
+          setCountdown(null);
+          timerStartRef.current = Date.now() / 1000;
+        }, 3600);
+        return () => { [t1, t2, t3, t4].forEach(clearTimeout); };
+      }
+
+      sfx.dangerSiren(5000);
       setCountdown(5);
       const t1 = setTimeout(() => { setCountdown(4); sfx.introTick(1); }, 1000);
       const t2 = setTimeout(() => { setCountdown(3); sfx.introTick(2); }, 2000);
@@ -82,9 +99,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   // نظام المؤقّت الموحّد: العدّاد يبدأ بعد انتهاء العدّ التمهيدي (3-2-1-انطلق)
   const isTurnBased = duel.turn === "attacker" || duel.turn === "defender";
   const totalSec = (duel.timeout_ms ? duel.timeout_ms : duelTimeoutMs) / 1000;
+  const isSolo = !duel.defender_id;
   // إذا فات العدّ التمهيدي (انضمام متأخر/إعادة تحميل) استخدم started_at من السيرفر
   if (timerStartRef.current === null && countdown === null && duel.started_at) {
-    timerStartRef.current = duel.started_at / 1000 + 3.8;
+    timerStartRef.current = duel.started_at / 1000 + (isSolo ? 3.2 : 5.2);
   }
   const timerStart = timerStartRef.current;
   const sharedRem = (countdown !== null || timerStart === null)
@@ -103,17 +121,26 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     : sharedRem;
   const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : sharedRem) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
-  const isSolo = !duel.defender_id;  // خانة فارغة: لا عدّاد تنازلي
+  const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
+  const showSoloIntro = countdown !== null && isSolo;
+  const showDuelIntro = countdown !== null && !isSolo;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
-      {countdown !== null && (
+      {showSoloIntro && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 pointer-events-none">
+          <div className="text-[9rem] md:text-[14rem] font-black neon-cyan animate-pulse tabular drop-shadow-[0_0_35px_rgba(0,240,255,0.65)]" data-testid="countdown">
+            {countdown}
+          </div>
+        </div>
+      )}
+      {showDuelIntro && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
           <div className="absolute inset-0 bg-black/95" />
           <div
             className="absolute inset-0"
             style={{
-              background: "radial-gradient(circle at 50% 34%, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.10) 16%, rgba(0,0,0,0.96) 40%)",
+              background: `radial-gradient(circle at 50% 50%, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0.08) 16%, rgba(0,0,0,0.96) 48%), linear-gradient(90deg, ${introOverlayColor} 0%, ${introOverlayColor === 'rgba(0, 0, 0, 0.95)' ? 'rgba(0, 0, 0, 0.95)' : 'rgba(255,255,255,0.08)' } 100%)`,
               boxShadow: "inset 0 0 120px rgba(0,0,0,0.95)",
             }}
           />

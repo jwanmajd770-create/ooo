@@ -34,11 +34,14 @@ export const sfx = {
     tone(440, 0.2, "square", 0.12, 2.0);
     tone(880, 0.4, "square", 0.15, 3.0);
   },
-  dramaticTension: () => {
-    tone(160, 0.25, "sawtooth", 0.08, 0);
-    tone(220, 0.2, "triangle", 0.10, 0.12);
-    tone(280, 0.18, "triangle", 0.12, 0.24);
-    tone(340, 0.28, "sawtooth", 0.14, 0.36);
+  dangerSiren: (durationMs = 5000) => {
+    const playPulse = () => {
+      tone(760, 0.08, "square", 0.08, 0);
+      tone(520, 0.08, "square", 0.08, 0.06);
+    };
+    playPulse();
+    const id = window.setInterval(playPulse, 220);
+    window.setTimeout(() => window.clearInterval(id), durationMs);
   },
   introTick: (step = 1) => {
     const freq = 360 + step * 140;
