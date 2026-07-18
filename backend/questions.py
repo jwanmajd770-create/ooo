@@ -17,6 +17,8 @@ CATEGORIES = [
     {"id": "games", "name": "ألعاب فيديو", "icon": "🎮", "color": "#00F0FF"},
     {"id": "quran", "name": "القرآن الكريم", "icon": "📖", "color": "#39FF14"},
     {"id": "capitals", "name": "عواصم ودول", "icon": "🗺️", "color": "#FFFF00"},
+    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
+    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
     {"id": "inventions", "name": "اختراعات", "icon": "💡", "color": "#FFFF00"},
     {"id": "celebs", "name": "مشاهير عرب", "icon": "⭐", "color": "#FF007F"},
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
