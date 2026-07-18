@@ -27,12 +27,28 @@ function tone(freq, dur = 0.15, type = "sine", vol = 0.15, delay = 0) {
 }
 
 export const sfx = {
-  // Countdown 3-2-1-GO
+  // Countdown 5-4-3-2-1-GO
   countdown: () => {
     tone(440, 0.2, "square", 0.12, 0);
     tone(440, 0.2, "square", 0.12, 1.0);
     tone(440, 0.2, "square", 0.12, 2.0);
     tone(880, 0.4, "square", 0.15, 3.0);
+  },
+  dramaticTension: () => {
+    tone(160, 0.25, "sawtooth", 0.08, 0);
+    tone(220, 0.2, "triangle", 0.10, 0.12);
+    tone(280, 0.18, "triangle", 0.12, 0.24);
+    tone(340, 0.28, "sawtooth", 0.14, 0.36);
+  },
+  introTick: (step = 1) => {
+    const freq = 360 + step * 140;
+    const dur = 0.06 + step * 0.01;
+    tone(freq, dur, "square", Math.min(0.14, 0.06 + step * 0.02));
+  },
+  duelStart: () => {
+    tone(620, 0.12, "square", 0.16, 0);
+    tone(780, 0.12, "triangle", 0.15, 0.08);
+    tone(1040, 0.24, "sine", 0.18, 0.16);
   },
   tick: () => tone(1200, 0.05, "square", 0.08),
   correct: () => {

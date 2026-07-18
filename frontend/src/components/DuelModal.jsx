@@ -21,7 +21,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     return () => clearInterval(iv);
   }, [duel?.started_at, duel?.resolved]);
 
-  // countdown 3-2-1 when a new duel appears
+  // countdown 5-4-3-2-1 when a new duel appears
   useEffect(() => {
     if (!duel) {
       lastDuelStart.current = null;
@@ -32,13 +32,15 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       lastDuelStart.current = duel.started_at;
       timerStartRef.current = null; // سيُضبط عند انتهاء العدّ التمهيدي
       sfx.resume();
-      sfx.countdown();
-      setCountdown(3);
-      const t1 = setTimeout(() => setCountdown(2), 1000);
-      const t2 = setTimeout(() => setCountdown(1), 2000);
-      const t3 = setTimeout(() => setCountdown("انطلق!"), 3000);
-      const t4 = setTimeout(() => { setCountdown(null); timerStartRef.current = Date.now() / 1000; }, 3800);
-      return () => { [t1, t2, t3, t4].forEach(clearTimeout); };
+      sfx.dramaticTension();
+      setCountdown(5);
+      const t1 = setTimeout(() => { setCountdown(4); sfx.introTick(1); }, 1000);
+      const t2 = setTimeout(() => { setCountdown(3); sfx.introTick(2); }, 2000);
+      const t3 = setTimeout(() => { setCountdown(2); sfx.introTick(3); }, 3000);
+      const t4 = setTimeout(() => { setCountdown(1); sfx.introTick(4); }, 4000);
+      const t5 = setTimeout(() => { sfx.duelStart(); setCountdown("انطلق!"); sfx.introTick(5); }, 5000);
+      const t6 = setTimeout(() => { setCountdown(null); timerStartRef.current = Date.now() / 1000; }, 5600);
+      return () => { [t1, t2, t3, t4, t5, t6].forEach(clearTimeout); };
     }
   }, [duel?.started_at, duel?.resolved]);
 
@@ -106,8 +108,16 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
       {countdown !== null && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 pointer-events-none">
-          <div className="text-[10rem] md:text-[15rem] font-black neon-cyan animate-pulse tabular" data-testid="countdown">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 bg-black/95" />
+          <div
+            className="absolute inset-0"
+            style={{
+              background: "radial-gradient(circle at 50% 34%, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.10) 16%, rgba(0,0,0,0.96) 40%)",
+              boxShadow: "inset 0 0 120px rgba(0,0,0,0.95)",
+            }}
+          />
+          <div className="relative z-10 text-[9rem] md:text-[14rem] font-black neon-cyan animate-pulse tabular drop-shadow-[0_0_35px_rgba(0,240,255,0.65)]" data-testid="countdown">
             {countdown}
           </div>
         </div>
