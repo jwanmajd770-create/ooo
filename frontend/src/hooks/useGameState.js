@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 
 export function useGameState(code, token, intervalMs = 1000) {
@@ -6,20 +6,33 @@ export function useGameState(code, token, intervalMs = 1000) {
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
 
+  const refreshState = useCallback(async () => {
+    if (!code) return null;
+    try {
+      try {
+        await api.tick(code);
+      } catch (_) {}
+      const s = await api.state(code, token);
+      setState(s);
+      return s;
+    } catch (e) {
+      const message = e?.response?.data?.detail || "خطأ في الاتصال";
+      setError(message);
+      throw e;
+    }
+  }, [code, token]);
+
   useEffect(() => {
     if (!code) return;
     let alive = true;
 
     async function poll() {
       try {
-        // tick to handle timeouts server-side, ignore error
-        try {
-          await api.tick(code);
-        } catch (_) {}
-        const s = await api.state(code, token);
-        if (alive) setState(s);
-      } catch (e) {
-        if (alive) setError(e?.response?.data?.detail || "خطأ في الاتصال");
+        await refreshState();
+      } catch (_) {
+        if (alive) {
+          // keep existing error handling from the previous implementation
+        }
       }
     }
 
@@ -29,7 +42,7 @@ export function useGameState(code, token, intervalMs = 1000) {
       alive = false;
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [code, token, intervalMs]);
+  }, [code, intervalMs, refreshState]);
 
-  return { state, error };
+  return { state, error, refreshState };
 }

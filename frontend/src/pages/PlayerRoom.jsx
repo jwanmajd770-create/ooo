@@ -16,7 +16,7 @@ export default function PlayerRoom() {
   const raw = localStorage.getItem(`player_${code}`);
   const info = raw ? JSON.parse(raw) : null;
   const token = info?.token;
-  const { state, error } = useGameState(code, token, 600);
+  const { state, error, refreshState } = useGameState(code, token, 600);
   const [shieldMode, setShieldMode] = useState(false);
   const [eyeHint, setEyeHint] = useState(null);
 
@@ -142,7 +142,16 @@ export default function PlayerRoom() {
   };
 
   const answer = async (idx) => {
-    try { const r = await api.answer(code, token, idx); return r; } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); throw e; }
+    try {
+      const r = await api.answer(code, token, idx);
+      try {
+        await refreshState();
+      } catch (_) {}
+      return r;
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "فشل");
+      throw e;
+    }
   };
 
   const duelPass = async () => {

@@ -172,17 +172,18 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
           <div className="absolute -top-3 right-6 px-3 py-1 rounded-full bg-cyan-400 text-black text-xs font-bold">
             الفئة: {duel.category}
           </div>
-          <h2 className="text-2xl md:text-3xl font-bold mb-6 mt-2 leading-relaxed" data-testid="duel-question">{duel.question.q}</h2>
-          {duel.question.img && (
+          {duel.question.img ? (
             <div className="mb-6 flex justify-center">
               <img
                 src={duel.question.img}
                 alt="question"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                className="max-h-56 md:max-h-72 rounded-xl border-2 border-white/10 shadow-2xl object-contain bg-black/40 p-2"
+                className="w-full max-w-[520px] max-h-[300px] object-contain rounded-xl border-2 border-white/10 shadow-2xl bg-black/40 p-2"
                 data-testid="duel-image"
               />
             </div>
+          ) : (
+            <h2 className="text-2xl md:text-3xl font-bold mb-6 mt-2 leading-relaxed" data-testid="duel-question">{duel.question.q}</h2>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {duel.question.opts.map((opt, i) => {
