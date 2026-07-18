@@ -12,7 +12,7 @@ from typing import Optional, Dict
 from datetime import datetime, timezone
 
 from questions import CATEGORIES, QUESTIONS, FLAGS_CATEGORIES
-from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
+from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
 
