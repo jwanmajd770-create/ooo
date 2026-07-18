@@ -597,25 +597,24 @@ async def start_game(req: StartGameReq):
         raise HTTPException(403)
     if len(game["players"]) < 2:
         raise HTTPException(400, "يجب أن يوجد لاعبان على الأقل")
-    # توزيع اللاعبين في مواقع متقابلة قطرياً
-    # للاعبين: (0,0) و(5,5) — أقصى زاويتين
-    # للأربعة: الزوايا الأربع
-    # لأكثر: زوايا + منتصف الأضلاع
+    # توزيع اللاعبين بالقرب من منتصف الشبكة
+    # للاعبين: (2,2) و(2,3) في شبكة 6x6
+    # للأربعة: خلايا مركزية قريبة
     gs = game.get("grid_size", 6)
-    corner_positions = [
-        (0, gs-1),        # زاوية علوية يمين (مربع 6 تقريباً)
-        (gs-1, 0),        # زاوية سفلية يسار (مربع 31 تقريباً)
-        (0, 0),           # زاوية علوية يسار
-        (gs-1, gs-1),     # زاوية سفلية يمين
-        (gs//2, 0),       # منتصف يسار
-        (gs//2, gs-1),    # منتصف يمين
-        (0, gs//2),       # منتصف أعلى
-        (gs-1, gs//2),    # منتصف أسفل
+    center_positions = [
+        (gs//2 - 1, gs//2 - 1),
+        (gs//2 - 1, gs//2),
+        (gs//2, gs//2 - 1),
+        (gs//2, gs//2),
+        (gs//2 - 2, gs//2 - 1),
+        (gs//2 - 1, gs//2 + 1),
+        (gs//2, gs//2 + 1),
+        (gs//2 + 1, gs//2),
     ]
     used = set()
     for i, p in enumerate(game["players"]):
         placed = False
-        for pos in corner_positions:
+        for pos in center_positions:
             if pos not in used and game["grid"][pos[0]][pos[1]] is None:
                 game["grid"][pos[0]][pos[1]] = p["id"]
                 used.add(pos)
