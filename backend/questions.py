@@ -4526,6 +4526,16 @@ def _dedupe_questions(items):
     return deduped
 
 
+# ===== دمج أسئلة classic_extra3.py مع إزالة التكرار =====
+from classic_extra3 import CLASSIC_EXTRA3
+
+for _cat_id, _qs in CLASSIC_EXTRA3.items():
+    if _cat_id in QUESTIONS:
+        QUESTIONS[_cat_id] = _dedupe_questions(QUESTIONS[_cat_id] + _qs)
+    else:
+        QUESTIONS[_cat_id] = _dedupe_questions(_qs)
+
+
 for _cat_id, _qs in GEMINI_EXTRA.items():
     if _cat_id in QUESTIONS:
         QUESTIONS[_cat_id] = _dedupe_questions(QUESTIONS[_cat_id] + _qs)
