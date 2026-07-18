@@ -24,7 +24,7 @@ export default function Home() {
   // عند اختيار الوضع، اجلب فئاته
   useEffect(() => {
     if (!gameMode) return;
-    const apiMode = gameMode === "football" ? "football" : gameMode === "flags_only" ? "flags_only" : "classic";
+    const apiMode = gameMode === "football" ? "football" : "classic";
     api.categories(apiMode).then((r) => { setCategories(r.categories); setSelCat(null); }).catch(() => {});
   }, [gameMode]);
 
