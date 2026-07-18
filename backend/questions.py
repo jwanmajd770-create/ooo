@@ -4502,11 +4502,36 @@ for _cat_id, _qs in CLASSIC_EXTRA4.items():
         QUESTIONS[_cat_id].extend(_qs)
     else:
         QUESTIONS[_cat_id] = _qs
-# -*- coding: utf-8 -*-
-from classic_extra4 import CLASSIC_EXTRA4
 
-for _cat_id, _qs in CLASSIC_EXTRA4.items():
+# ===== دمج أسئلة gemini_extra.py مع إزالة التكرار =====
+from gemini_extra import GEMINI_EXTRA
+
+
+def _question_signature(question):
+    return (
+        (question.get('q') or '').strip().lower(),
+        tuple(question.get('opts', [])),
+        question.get('a')
+    )
+
+
+def _dedupe_questions(items):
+    seen = set()
+    deduped = []
+    for item in items:
+        signature = _question_signature(item)
+        if signature not in seen:
+            seen.add(signature)
+            deduped.append(item)
+    return deduped
+
+
+for _cat_id, _qs in GEMINI_EXTRA.items():
     if _cat_id in QUESTIONS:
-        QUESTIONS[_cat_id].extend(_qs)
+        QUESTIONS[_cat_id] = _dedupe_questions(QUESTIONS[_cat_id] + _qs)
     else:
-        QUESTIONS[_cat_id] = _qs
+        QUESTIONS[_cat_id] = _dedupe_questions(_qs)
+
+# حذف التكرارات من جميع الأقسام بعد الدمج
+for _cat_id in list(QUESTIONS.keys()):
+    QUESTIONS[_cat_id] = _dedupe_questions(QUESTIONS[_cat_id])
