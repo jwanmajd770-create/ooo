@@ -22,6 +22,8 @@ CATEGORIES = [
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
     {"id": "business", "name": "اقتصاد وأعمال", "icon": "💰", "color": "#FFFF00"},
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
+    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
+    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
 ]
 
 QUESTIONS = {'history': [{'q': 'في أي عام كانت غزوة بدر الكبرى؟', 'opts': ['2 هـ', '3 هـ', '5 هـ', '8 هـ'], 'a': 0},
@@ -4545,3 +4547,10 @@ for _cat_id, _qs in GEMINI_EXTRA.items():
 # حذف التكرارات من جميع الأقسام بعد الدمج
 for _cat_id in list(QUESTIONS.keys()):
     QUESTIONS[_cat_id] = _dedupe_questions(QUESTIONS[_cat_id])
+
+from image_questions import IMAGE_QUESTIONS
+for _cat, _qs in IMAGE_QUESTIONS.items():
+    if _cat in QUESTIONS:
+        QUESTIONS[_cat].extend(_qs)
+    else:
+        QUESTIONS[_cat] = _qs
