@@ -27,7 +27,7 @@ export default function Tournament() {
 
   useEffect(() => {
     const apiMode = mode === "football" ? "football" : mode === "flags_only" ? "flags_only" : "classic";
-    fetch(${API}/categories?mode=)
+    fetch(`${API}/categories?mode=${apiMode}`)
       .then((res) => res.json())
       .then((data) => {
         setCategories(data.categories || []);
@@ -39,7 +39,7 @@ export default function Tournament() {
   const refreshState = async (roomCode = code) => {
     if (!roomCode) return;
     try {
-      const data = await fetch(${API}/tournament//state).then((res) => res.json());
+      const data = await fetch(`${API}/tournament/${roomCode}/state`).then((res) => res.json());
       setRoom(data);
     } catch {
       // ignore
@@ -55,7 +55,7 @@ export default function Tournament() {
   const createRoom = async () => {
     setLoading(true);
     try {
-      const res = await fetch(${API}/tournament/create, {
+      const res = await fetch(`${API}/tournament/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ host_name: hostName, mode }),
@@ -76,7 +76,7 @@ export default function Tournament() {
     if (!code || !name || !category) return;
     setLoading(true);
     try {
-      const res = await fetch(${API}/tournament/join, {
+      const res = await fetch(`${API}/tournament/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, name, category_id: category }),
@@ -97,7 +97,7 @@ export default function Tournament() {
     if (!code || !hostToken) return;
     setLoading(true);
     try {
-      await fetch(${API}/tournament/start, {
+      await fetch(`${API}/tournament/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, host_token: hostToken }),
@@ -115,7 +115,7 @@ export default function Tournament() {
     if (!code || !hostToken) return;
     setLoading(true);
     try {
-      await fetch(${API}/tournament/advance, {
+      await fetch(`${API}/tournament/advance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, host_token: hostToken }),
@@ -132,7 +132,7 @@ export default function Tournament() {
     if (!code || !playerToken || !answer) return;
     setLoading(true);
     try {
-      await fetch(${API}/tournament/answer, {
+      await fetch(`${API}/tournament/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, player_token: playerToken, answer_idx: Number(answer) }),
@@ -168,8 +168,8 @@ export default function Tournament() {
 
         <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
           <div className="mb-4 flex gap-3">
-            <button onClick={() => setRole("host")} className={ounded-lg px-4 py-2 }>مقدم</button>
-            <button onClick={() => setRole("player")} className={ounded-lg px-4 py-2 }>متسابق</button>
+            <button onClick={() => setRole("host")} className={`rounded-lg px-4 py-2 ${role === "host" ? "bg-orange-500" : "bg-white/10"}`}>مقدم</button>
+            <button onClick={() => setRole("player")} className={`rounded-lg px-4 py-2 ${role === "player" ? "bg-cyan-500" : "bg-white/10"}`}>متسابق</button>
           </div>
 
           {role === "host" ? (
@@ -257,7 +257,11 @@ export default function Tournament() {
                     <p className="mb-3 font-bold">{currentMatch.question?.q}</p>
                     <div className="grid gap-2">
                       {currentMatch.question?.opts?.map((opt, idx) => (
-                        <button key={idx} onClick={() => setAnswer(String(idx))} className={ounded-lg border p-3 text-right }>
+                        <button
+                          key={idx}
+                          onClick={() => setAnswer(String(idx))}
+                          className={`rounded-lg border p-3 text-right ${answer === String(idx) ? "border-cyan-400 bg-cyan-500/20" : "border-white/10"}`}
+                        >
                           {opt}
                         </button>
                       ))}
@@ -274,7 +278,7 @@ export default function Tournament() {
 
               {room.state === "active" && (!currentMatch || currentMatch.status !== "active") ? (
                 <div className="rounded-xl border border-white/10 bg-black/40 p-4 text-gray-400">
-                  {room.winner_id ? البطل:  : "الجدول ظاهر بين المبارزات. اضغط على «المبارزة التالية» عندما تكون جاهزاً."}
+                  {room.winner_id ? `البطل: ${playerMap[room.winner_id]?.name || "—"}` : "الجدول ظاهر بين المبارزات. اضغط على «المبارزة التالية» عندما تكون جاهزاً."}
                 </div>
               ) : null}
             </div>
@@ -283,7 +287,7 @@ export default function Tournament() {
               <h2 className="mb-4 text-xl font-bold">الجدول</h2>
               <div className="space-y-3">
                 {room.bracket?.length ? room.bracket.map((match) => (
-                  <div key={match.id} className={ounded-xl border p-3 }>
+                  <div key={match.id} className={`rounded-xl border p-3 ${match.id === room.current_match_id ? "border-orange-400" : "border-white/10"}`}>
                     <p className="text-sm text-gray-400">{match.label}</p>
                     <p className="font-bold">{match.players?.length ? match.players.map((pid) => playerMap[pid]?.name || "—").join(" vs ") : "في انتظار اللاعب"}</p>
                     <p className="text-sm text-gray-400">الحالة: {match.status}</p>
@@ -300,7 +304,7 @@ export default function Tournament() {
             <h2 className="mb-3 text-xl font-bold">اختر فئتك</h2>
             <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
               {categories.map((c) => (
-                <button key={c.id} onClick={() => setCategory(c.id)} className={ounded-lg border p-3 text-right }>
+                <button key={c.id} onClick={() => setCategory(c.id)} className={`rounded-lg border p-3 text-right ${category === c.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10"}`}>
                   <div className="mb-1 text-2xl">{c.icon}</div>
                   <div className="text-sm">{c.name}</div>
                 </button>
