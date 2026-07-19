@@ -256,23 +256,16 @@ def finish_duel(game, loser_id):
 
 
 def check_duel_timeout(game):
-    """يتحقق إن نفد وقت صاحب الدور الحالي وينهي المبارزة تلقائياً."""
+    """يتحقق إن انتهى وقت المبارزة الكلي أو تم تلقي إجابتين."""
     d = game.get("duel")
     if not d or d.get("resolved"):
         return
-    # امنح مهلة تمهيدية (3.8 ثانية للعدّ 3-2-1) قبل بدء خصم الوقت
     if now_ms() - d.get("started_at", now_ms()) < 3800:
         return
-    turn = d.get("turn")
-    if not turn:
-        return
-    # هجوم على خانة فارغة (لا مدافع): لا عدّاد تنازلي إطلاقاً — انتظر إجابة المهاجم
     if not d.get("defender_id"):
         return
-    turn_id = d["attacker_id"] if turn == "attacker" else d.get("defender_id")
-    if _duel_current_remaining(d) <= 0:
-        d[f"{turn}_stored_time"] = 0.0
-        finish_duel(game, turn_id)
+    if now_ms() - d.get("started_at", now_ms()) >= d.get("timeout_ms", DUEL_TIMEOUT_MS):
+        resolve_duel_if_ready(game)
 
 
 def public_game(game):
@@ -296,7 +289,7 @@ def public_game(game):
             "scores": game.get("final_duel_scores", {}),
             "players": game.get("final_duel_players", []),
         } if game.get("final_duel_active") else None,
-        "duel_timeout_ms": FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS,
+        "duel_timeout_ms": DUEL_TIMEOUT_MS,
         "mode": game.get("mode", "classic"),
     }
     if game.get("duel"):
@@ -686,7 +679,7 @@ async def attack(req: AttackReq):
     question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
-    timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
+    timeout = DUEL_TIMEOUT_MS
     bank_sec = timeout / 1000.0  # رصيد كل لاعب بالثواني
     now = now_ms()
     game["duel"] = {
@@ -847,29 +840,28 @@ async def answer(req: AnswerReq):
         raise HTTPException(400, "ليس دورك في المبارزة")
 
     is_solo = not d.get("defender_id")  # خانة فارغة: بلا حدّ زمني
-    # هل نفد وقت صاحب الدور؟ (لا ينطبق على الخانة الفارغة)
-    remaining = _duel_current_remaining(d)
-    if not is_solo and remaining <= 0:
-        # خزّن رصيده صفراً وأنهِ المبارزة (خسر)
-        d[f"{turn}_stored_time"] = 0.0
-        finish_duel(game, turn_id)
-        touch(game)
-        return {"ok": True, "timed_out": True}
-
     correct = d["question"]["a"]
     is_correct = (req.answer_idx == correct)
     now_sec = now_ms() / 1000.0
 
+    if turn == "attacker":
+        d["attacker_answer"] = req.answer_idx
+        d["attacker_time"] = now_sec
+    else:
+        d["defender_answer"] = req.answer_idx
+        d["defender_time"] = now_sec
+
     if is_correct:
-        # خزّن الوقت المتبقي لهذا اللاعب
-        d[f"{turn}_stored_time"] = remaining
+        d[f"{turn}_stored_time"] = d.get(f"{turn}_stored_time", 0.0)
         d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + 1
-        # في هجوم خانة فارغة (لا مدافع): إجابة صحيحة = فوز فوري
         if is_solo:
-            finish_duel(game, None)  # لا خاسر، المهاجم يفوز
+            finish_duel(game, None)
             touch(game)
             return {"ok": True, "correct": True}
-        # بدّل الدور للخصم بسؤال جديد
+        if d.get("attacker_answer") is not None and d.get("defender_answer") is not None:
+            resolve_duel_if_ready(game)
+            touch(game)
+            return {"ok": True, "correct": True, "resolved": True}
         other = "defender" if turn == "attacker" else "attacker"
         d["turn"] = other
         d["turn_start_ts"] = now_sec
@@ -880,25 +872,21 @@ async def answer(req: AnswerReq):
         touch(game)
         return {"ok": True, "correct": True, "switched": True}
     else:
-        # خانة فارغة: إجابة خاطئة = المهاجم يخسر المحاولة (لا استيلاء)، بلا خصم وقت
         if is_solo:
-            finish_duel(game, d["attacker_id"])  # المهاجم خسر الخانة الفارغة
+            finish_duel(game, d["attacker_id"])
             touch(game)
             return {"ok": True, "correct": False}
-        # مبارزة: إجابة خاطئة = تمرير: خصم 3 ثوانٍ + سؤال جديد، الدور يبقى
-        new_remaining = max(0.0, remaining - 3.0)
-        d[f"{turn}_stored_time"] = new_remaining
-        d["turn_start_ts"] = now_sec
-        if new_remaining <= 0:
-            finish_duel(game, turn_id)
+        if d.get("attacker_answer") is not None and d.get("defender_answer") is not None:
+            resolve_duel_if_ready(game)
             touch(game)
-            return {"ok": True, "correct": False, "timed_out": True}
+            return {"ok": True, "correct": False, "resolved": True}
+        d["turn_start_ts"] = now_sec
         newq = get_random_question(d["category"], game.get("custom_questions"),
                                    force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
             d["question"] = newq
         touch(game)
-        return {"ok": True, "correct": False, "penalty": 3}
+        return {"ok": True, "correct": False}
 
 
 @api_router.post("/rooms/powerup")
