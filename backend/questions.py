@@ -24,12 +24,6 @@ CATEGORIES = [
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
 ]
 
-FLAGS_CATEGORIES = [
-    {"id": "capitals", "name": "عواصم ودول", "icon": "🗺️", "color": "#FFFF00"},
-    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
-    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
-]
-
 QUESTIONS = {'history': [{'q': 'في أي عام كانت غزوة بدر الكبرى؟', 'opts': ['2 هـ', '3 هـ', '5 هـ', '8 هـ'], 'a': 0},
              {'q': 'من هو مؤسس الدولة الأموية؟',
               'opts': ['عمر بن الخطاب', 'معاوية بن أبي سفيان', 'عبد الملك بن مروان', 'هارون الرشيد'],
@@ -4541,12 +4535,6 @@ for _cat_id, _qs in CLASSIC_EXTRA3.items():
     else:
         QUESTIONS[_cat_id] = _dedupe_questions(_qs)
 
-from image_questions import IMAGE_QUESTIONS
-for _cat, _qs in IMAGE_QUESTIONS.items():
-    if _cat in QUESTIONS:
-        QUESTIONS[_cat].extend(_qs)
-    else:
-        QUESTIONS[_cat] = _qs
 
 for _cat_id, _qs in GEMINI_EXTRA.items():
     if _cat_id in QUESTIONS:
