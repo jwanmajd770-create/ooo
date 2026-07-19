@@ -11,10 +11,16 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 from datetime import datetime, timezone
 
-from questions import CATEGORIES, QUESTIONS
-from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
+from questions import CATEGORIES, QUESTIONS, FLAGS_CATEGORIES
+from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
+
+# إضافة فئات صور جديدة للعبة
+if not any(c["id"] == "players_img" for c in CATEGORIES):
+    CATEGORIES.append({"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"})
+if not any(c["id"] == "actors_img" for c in CATEGORIES):
+    CATEGORIES.append({"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"})
 FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
 for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
     QUESTIONS.setdefault(_fc_id, [])
@@ -110,6 +116,10 @@ def _pick_avoiding_repeats(pool, asked_set, key_fn):
     chosen = random.choice(fresh)
     asked_set.add(key_fn(chosen))
     return chosen
+
+
+def _duel_force_image(category_id, game):
+    return (game.get("mode") == "flags_only") or category_id in {"players_img", "actors_img"}
 
 
 def get_random_question(category_id, custom_questions=None, force_image=False, game=None):
@@ -293,6 +303,7 @@ def public_game(game):
         "duel": None,
         "last_action": game.get("last_action"),
         "sudden_death": game.get("sudden_death", False),
+        "mode_name": "أعلام والصور" if game.get("mode") == "flags_only" else ("الكلاسيكي" if game.get("mode", "classic") == "classic" else game.get("mode", "classic")),
         "final_duel": {
             "active": game.get("final_duel_active", False),
             "round": game.get("final_duel_round", 0),
@@ -442,6 +453,8 @@ async def root():
 async def get_categories(mode: str = "classic"):
     if mode == "football":
         return {"categories": FOOTBALL_CATEGORIES}
+    if mode == "flags_only":
+        return {"categories": FLAGS_CATEGORIES}
     return {"categories": CATEGORIES}
 
 
@@ -587,25 +600,24 @@ async def start_game(req: StartGameReq):
         raise HTTPException(403)
     if len(game["players"]) < 2:
         raise HTTPException(400, "يجب أن يوجد لاعبان على الأقل")
-    # توزيع اللاعبين في مواقع متقابلة قطرياً
-    # للاعبين: (0,0) و(5,5) — أقصى زاويتين
-    # للأربعة: الزوايا الأربع
-    # لأكثر: زوايا + منتصف الأضلاع
+    # توزيع اللاعبين بالقرب من منتصف الشبكة
+    # للاعبين: (2,2) و(2,3) في شبكة 6x6
+    # للأربعة: خلايا مركزية قريبة
     gs = game.get("grid_size", 6)
-    corner_positions = [
-        (0, gs-1),        # زاوية علوية يمين (مربع 6 تقريباً)
-        (gs-1, 0),        # زاوية سفلية يسار (مربع 31 تقريباً)
-        (0, 0),           # زاوية علوية يسار
-        (gs-1, gs-1),     # زاوية سفلية يمين
-        (gs//2, 0),       # منتصف يسار
-        (gs//2, gs-1),    # منتصف يمين
-        (0, gs//2),       # منتصف أعلى
-        (gs-1, gs//2),    # منتصف أسفل
+    center_positions = [
+        (gs//2 - 1, gs//2 - 1),
+        (gs//2 - 1, gs//2),
+        (gs//2, gs//2 - 1),
+        (gs//2, gs//2),
+        (gs//2 - 2, gs//2 - 1),
+        (gs//2 - 1, gs//2 + 1),
+        (gs//2, gs//2 + 1),
+        (gs//2 + 1, gs//2),
     ]
     used = set()
     for i, p in enumerate(game["players"]):
         placed = False
-        for pos in corner_positions:
+        for pos in center_positions:
             if pos not in used and game["grid"][pos[0]][pos[1]] is None:
                 game["grid"][pos[0]][pos[1]] = p["id"]
                 used.add(pos)
@@ -649,11 +661,17 @@ async def attack(req: AttackReq):
             return {"ok": True, "blocked": True}
     if target_owner is None:
         defender_id = None
-        category = "capitals" if game.get("mode") == "flags_only" else me["category_id"]
+        if game.get("mode") == "flags_only":
+            category = me["category_id"] if me["category_id"] in {c["id"] for c in FLAGS_CATEGORIES} else "capitals"
+        else:
+            category = me["category_id"]
     else:
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
-        category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
+        if game.get("mode") == "flags_only":
+            category = defender["category_id"] if defender["category_id"] in {c["id"] for c in FLAGS_CATEGORIES} else "capitals"
+        else:
+            category = defender["category_id"]
 
     # المبارزة النهائية: تحديد الفئة حسب الجولة
     if game.get("final_duel_active") and game.get("mode") != "flags_only":
@@ -673,11 +691,11 @@ async def attack(req: AttackReq):
                 all_cats = [c["id"] for c in CATEGORIES if c["id"] not in ("football",)]
                 category = _r.choice(all_cats) if all_cats else category
 
-    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+    question = get_random_question(category, game.get("custom_questions"), force_image=_duel_force_image(category, game), game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = FAST_DUEL_TIMEOUT_MS if game.get("mode") == "flags_only" else DUEL_TIMEOUT_MS
-    bank_sec = timeout / 1000.0  # رصيد كل لاعب بالثواني
+    bank_sec = DUEL_TIMEOUT_MS / 1000.0  # رصيد كل لاعب بالثواني
     now = now_ms()
     game["duel"] = {
         "attacker_id": me["id"],
@@ -861,10 +879,11 @@ async def answer(req: AnswerReq):
             return {"ok": True, "correct": True}
         # بدّل الدور للخصم بسؤال جديد
         other = "defender" if turn == "attacker" else "attacker"
+        d[f"{other}_stored_time"] = d.get(f"{other}_stored_time", 0.0) + remaining
         d["turn"] = other
         d["turn_start_ts"] = now_sec
         newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"), game=game)
+                                   force_image=_duel_force_image(d["category"], game), game=game)
         if newq:
             d["question"] = newq
         touch(game)
@@ -914,7 +933,7 @@ async def use_powerup(req: PowerUpReq):
         opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
         if opp_answer is not None:
             raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=_duel_force_image(d["category"], game), game=game)
         d["attacker_answer"] = None
         d["defender_answer"] = None
         d["attacker_time"] = None
@@ -1088,8 +1107,8 @@ app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
