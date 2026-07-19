@@ -17,13 +17,17 @@ CATEGORIES = [
     {"id": "games", "name": "ألعاب فيديو", "icon": "🎮", "color": "#00F0FF"},
     {"id": "quran", "name": "القرآن الكريم", "icon": "📖", "color": "#39FF14"},
     {"id": "capitals", "name": "عواصم ودول", "icon": "🗺️", "color": "#FFFF00"},
-    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
-    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
     {"id": "inventions", "name": "اختراعات", "icon": "💡", "color": "#FFFF00"},
     {"id": "celebs", "name": "مشاهير عرب", "icon": "⭐", "color": "#FF007F"},
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
     {"id": "business", "name": "اقتصاد وأعمال", "icon": "💰", "color": "#FFFF00"},
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
+]
+
+FLAGS_CATEGORIES = [
+    {"id": "capitals", "name": "عواصم ودول", "icon": "🗺️", "color": "#FFFF00"},
+    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
+    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
 ]
 
 QUESTIONS = {'history': [{'q': 'في أي عام كانت غزوة بدر الكبرى؟', 'opts': ['2 هـ', '3 هـ', '5 هـ', '8 هـ'], 'a': 0},
