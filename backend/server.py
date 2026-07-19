@@ -15,6 +15,7 @@ from questions import CATEGORIES, FLAGS_CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
+from tournament import router as tournament_router
 FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
 for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
     QUESTIONS.setdefault(_fc_id, [])
@@ -1083,6 +1084,7 @@ async def tick(code: str):
 
 
 app.include_router(api_router)
+app.include_router(tournament_router)
 
 app.add_middleware(
     CORSMiddleware,
