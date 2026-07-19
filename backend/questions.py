@@ -24,6 +24,9 @@ CATEGORIES = [
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
     {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
     {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
+    {"id": "anime_img", "name": "تحدي الصور - أنمي", "icon": "🎌", "color": "#FF6B9D"},
+    {"id": "brands_img", "name": "تحدي الصور - براندات", "icon": "🏷️", "color": "#FFD700"},
+    {"id": "clubs_img", "name": "تحدي الصور - أندية", "icon": "🏆", "color": "#00FF88"},
 ]
 
 FLAGS_CATEGORIES = [
