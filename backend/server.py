@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from typing import Optional, Dict
 from datetime import datetime, timezone
 
-from questions import CATEGORIES, QUESTIONS
+from questions import CATEGORIES, FLAGS_CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
@@ -439,6 +439,8 @@ async def root():
 async def get_categories(mode: str = "classic"):
     if mode == "football":
         return {"categories": FOOTBALL_CATEGORIES}
+    if mode == "flags_only":
+        return {"categories": FLAGS_CATEGORIES}
     return {"categories": CATEGORIES}
 
 
@@ -498,6 +500,10 @@ async def join_room(req: JoinReq):
         cat = next((c for c in FOOTBALL_CATEGORIES if c["id"] == req.category_id), None)
         if not cat:
             raise HTTPException(400, "هذه الغرفة لوضع كرة القدم — اختر فئة كروية")
+    elif room_mode == "flags_only":
+        cat = next((c for c in FLAGS_CATEGORIES if c["id"] == req.category_id), None)
+        if not cat:
+            raise HTTPException(400, "فئة غير صالحة لهذا الوضع")
     else:
         cat = next((c for c in CATEGORIES if c["id"] == req.category_id), None)
         if not cat:
@@ -644,13 +650,20 @@ async def attack(req: AttackReq):
             game["last_action"] = {"type": "shield_blocked", "attacker": me["name"], "defender": defender["name"]}
             next_turn(game)
             return {"ok": True, "blocked": True}
+    flags_allowed_ids = {c["id"] for c in FLAGS_CATEGORIES}
     if target_owner is None:
         defender_id = None
-        category = "capitals" if game.get("mode") == "flags_only" else me["category_id"]
+        if game.get("mode") == "flags_only":
+            category = me["category_id"] if me["category_id"] in flags_allowed_ids else "capitals"
+        else:
+            category = me["category_id"]
     else:
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
-        category = "capitals" if game.get("mode") == "flags_only" else defender["category_id"]
+        if game.get("mode") == "flags_only":
+            category = defender["category_id"] if defender["category_id"] in flags_allowed_ids else "capitals"
+        else:
+            category = defender["category_id"]
 
     # المبارزة النهائية: تحديد الفئة حسب الجولة
     if game.get("final_duel_active") and game.get("mode") != "flags_only":

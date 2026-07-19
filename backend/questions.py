@@ -26,6 +26,12 @@ CATEGORIES = [
     {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
 ]
 
+FLAGS_CATEGORIES = [
+    next(c for c in CATEGORIES if c["id"] == "capitals"),
+    next(c for c in CATEGORIES if c["id"] == "players_img"),
+    next(c for c in CATEGORIES if c["id"] == "actors_img"),
+]
+
 QUESTIONS = {'history': [{'q': 'في أي عام كانت غزوة بدر الكبرى؟', 'opts': ['2 هـ', '3 هـ', '5 هـ', '8 هـ'], 'a': 0},
              {'q': 'من هو مؤسس الدولة الأموية؟',
               'opts': ['عمر بن الخطاب', 'معاوية بن أبي سفيان', 'عبد الملك بن مروان', 'هارون الرشيد'],
