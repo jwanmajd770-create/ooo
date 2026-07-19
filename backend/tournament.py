@@ -1,17 +1,19 @@
-from fastapi import APIRouter, HTTPException
+﻿from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 import random
 import string
 from datetime import datetime, timezone
 
-from questions import CATEGORIES, FLAGS_CATEGORIES
+from questions import CATEGORIES, FLAGS_CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
-from questions import QUESTIONS
+
+for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
+    QUESTIONS.setdefault(_fc_id, [])
+    QUESTIONS[_fc_id].extend(_fc_qs)
 
 router = APIRouter(prefix="/api/tournament")
-
 TOURNAMENTS: Dict[str, dict] = {}
 
 
@@ -35,6 +37,11 @@ class AnswerTournamentReq(BaseModel):
     code: str
     player_token: str
     answer_idx: int
+
+
+class AdvanceTournamentReq(BaseModel):
+    code: str
+    host_token: str
 
 
 def now_ms() -> int:
@@ -62,92 +69,131 @@ def _pick_question(category_id: str):
         return random.choice(qs)
     if imgs:
         return random.choice(imgs)
-    return {"q": "ما اسم العلم؟", "opts": ["أ", "ب", "ج", "د"], "a": 0}
+    return {"q": "ما هو الجواب؟", "opts": ["أ", "ب", "ج", "د"], "a": 0}
 
 
-def _build_match(match_id: str, round_num: int, players: List[str], next_match_id: Optional[str] = None):
+def _make_match(match_id: str, players: List[str], label: str = "مباراة"):
     return {
         "id": match_id,
-        "round": round_num,
+        "label": label,
         "players": players,
         "status": "pending",
         "winner_id": None,
         "scores": {},
-        "round_number": 1,
+        "current_round": 1,
         "active_player_id": None,
         "question": None,
-        "history": [],
-        "next_match_id": next_match_id,
+        "round_results": [],
     }
 
 
-def _activate_match(tournament: dict, match: dict):
-    if len(match["players"]) < 2:
-        return
-    player_ids = match["players"]
-    player_lookup = tournament["player_lookup"]
-    match["status"] = "active"
-    match["scores"] = {player_ids[0]: 0, player_ids[1]: 0}
-    match["round_number"] = 1
-    match["active_player_id"] = player_ids[0]
-    match["question"] = _build_question_for_round(tournament, match, 1)
-    tournament["current_match"] = match
+def _player_by_id(tournament: dict):
+    return {p["id"]: p for p in tournament["players"]}
 
 
-def _build_question_for_round(tournament: dict, match: dict, round_num: int):
-    player_ids = match["players"]
-    player_lookup = tournament["player_lookup"]
+def _round_category(tournament: dict, match: dict, round_num: int):
+    players = match["players"]
+    if len(players) < 2:
+        return None
+    player_map = _player_by_id(tournament)
+    first = player_map[players[0]]["category_id"]
+    second = player_map[players[1]]["category_id"]
     if round_num == 1:
-        category_id = player_lookup[player_ids[0]]["category_id"]
-    elif round_num == 2:
-        category_id = player_lookup[player_ids[1]]["category_id"]
+        return first
+    if round_num == 2:
+        return second
+    used = {first, second}
+    categories = _categories_for_mode(tournament["mode"])
+    available = [c["id"] for c in categories if c["id"] not in used]
+    return random.choice(available) if available else first
+
+
+def _activate_match(tournament: dict, match: dict):
+    match["status"] = "active"
+    match["scores"] = {pid: 0 for pid in match["players"]}
+    match["current_round"] = 1
+    match["round_results"] = []
+    match["question"] = None
+    match["active_player_id"] = match["players"][0] if len(match["players"]) > 0 else None
+    tournament["current_match_id"] = match["id"]
+    tournament["state"] = "active"
+    _load_question(tournament, match)
+
+
+def _load_question(tournament: dict, match: dict):
+    category_id = _round_category(tournament, match, match["current_round"])
+    match["question"] = _pick_question(category_id) if category_id else {"q": "لا توجد أسئلة", "opts": ["1", "2", "3", "4"], "a": 0}
+
+
+def _finish_match(tournament: dict, match: dict):
+    players = match["players"]
+    if len(players) < 2:
+        match["winner_id"] = players[0] if players else None
+        match["status"] = "finished"
+        tournament["current_match_id"] = None
+        return
+
+    p1, p2 = players[0], players[1]
+    s1 = match["scores"].get(p1, 0)
+    s2 = match["scores"].get(p2, 0)
+    if s1 >= 2:
+        match["winner_id"] = p1
+    elif s2 >= 2:
+        match["winner_id"] = p2
+    elif match["current_round"] >= 3:
+        match["winner_id"] = p1 if s1 > s2 else (p2 if s2 > s1 else p1)
     else:
-        categories = _categories_for_mode(tournament["mode"])
-        category_id = random.choice([c["id"] for c in categories if c["id"] not in {player_lookup[player_ids[0]]["category_id"], player_lookup[player_ids[1]]["category_id"]}]) if len(categories) > 2 else player_lookup[player_ids[0]]["category_id"]
-    return _pick_question(category_id)
+        match["winner_id"] = None
+    match["status"] = "finished"
+    tournament["current_match_id"] = None
+
+    if match["winner_id"]:
+        next_match = None
+        for m in tournament.get("bracket", []):
+            if m["id"] != match["id"] and m.get("status") == "pending" and m["players"] and m["players"][0] == match["winner_id"]:
+                next_match = m
+                break
+        if next_match is None:
+            for m in tournament.get("bracket", []):
+                if m["id"] != match["id"] and m.get("status") == "pending" and len(m["players"]) == 1:
+                    next_match = m
+                    break
+        if next_match is not None:
+            if len(next_match["players"]) < 2:
+                next_match["players"].append(match["winner_id"])
+            if len(next_match["players"]) == 2:
+                next_match["status"] = "pending"
+        if not any(m.get("status") == "active" for m in tournament.get("bracket", [])):
+            winners = [m["winner_id"] for m in tournament.get("bracket", []) if m.get("winner_id")]
+            if winners and len(winners) == len(tournament.get("bracket", [])):
+                tournament["winner_id"] = winners[-1]
+                tournament["state"] = "finished"
 
 
-def _advance_to_next_match(tournament: dict):
-    current = tournament.get("current_match")
-    if current and current.get("status") == "active":
-        return current
+def _build_bracket(tournament: dict):
+    players = [p["id"] for p in tournament["players"]]
+    random.shuffle(players)
+    if len(players) == 2:
+        return [_make_match("m1", players, "مباراة أولى")]
+    if len(players) == 3:
+        return [_make_match("m1", [players[1], players[2]], "مباراة أولى"), _make_match("final", [players[0]], "النهائي")]
+    matches = []
+    for i in range(0, len(players), 2):
+        pair = players[i:i + 2]
+        if len(pair) == 2:
+            matches.append(_make_match(f"m{i // 2 + 1}", pair, "مباراة أولى"))
+        else:
+            matches.append(_make_match(f"m{i // 2 + 1}", pair, "مباراة أولى"))
+    matches.append(_make_match("final", [], "النهائي"))
+    return matches
+
+
+def _start_first_match(tournament: dict):
     for match in tournament.get("bracket", []):
-        if match.get("status") == "pending" and len(match.get("players", [])) >= 2:
+        if match["players"] and len(match["players"]) >= 2:
             _activate_match(tournament, match)
             return match
     return None
-
-
-def _finalize_match(tournament: dict, match: dict):
-    winner_id = None
-    if match.get("scores"):
-        player_ids = match["players"]
-        s0 = match["scores"].get(player_ids[0], 0)
-        s1 = match["scores"].get(player_ids[1], 0)
-        if s0 >= 2:
-            winner_id = player_ids[0]
-        elif s1 >= 2:
-            winner_id = player_ids[1]
-        elif match.get("round_number", 1) >= 3:
-            winner_id = player_ids[0] if s0 > s1 else (player_ids[1] if s1 > s0 else player_ids[0])
-    if not winner_id and match.get("players"):
-        winner_id = match["players"][0]
-    match["winner_id"] = winner_id
-    match["status"] = "finished"
-    tournament["current_match"] = None
-    if winner_id and match.get("next_match_id"):
-        next_match = next((m for m in tournament.get("bracket", []) if m["id"] == match["next_match_id"]), None)
-        if next_match is not None:
-            if len(next_match.get("players", [])) < 2:
-                next_match["players"].append(winner_id)
-            if len(next_match.get("players", [])) >= 2:
-                next_match["status"] = "ready"
-    _advance_to_next_match(tournament)
-    if not tournament.get("current_match"):
-        winners = [m["winner_id"] for m in tournament.get("bracket", []) if m.get("winner_id")]
-        if winners:
-            tournament["winner_id"] = winners[-1]
-            tournament["state"] = "finished"
 
 
 @router.post("/create")
@@ -158,14 +204,13 @@ async def create_tournament(req: CreateTournamentReq):
     host_token = "".join(random.choices(string.ascii_letters + string.digits, k=16))
     tournament = {
         "code": code,
-        "host_token": host_token,
         "host_name": req.host_name or "المقدم",
         "mode": req.mode or "classic",
+        "host_token": host_token,
         "state": "lobby",
         "players": [],
-        "player_lookup": {},
         "bracket": [],
-        "current_match": None,
+        "current_match_id": None,
         "winner_id": None,
         "created_at": now_ms(),
         "last_activity": now_ms(),
@@ -180,16 +225,14 @@ async def join_tournament(req: JoinTournamentReq):
     if not tournament:
         raise HTTPException(404, "الغرفة غير موجودة")
     if tournament["state"] != "lobby":
-        raise HTTPException(400, "المبارزة بدأت بالفعل")
+        raise HTTPException(400, "البطولة بدأت بالفعل")
     categories = _categories_for_mode(tournament["mode"])
     category = next((c for c in categories if c["id"] == req.category_id), None)
     if not category:
         raise HTTPException(400, "فئة غير صالحة")
-    player_id = "p" + "".join(random.choices(string.ascii_letters + string.digits, k=6))
-    player_token = "".join(random.choices(string.ascii_letters + string.digits, k=12))
     player = {
-        "id": player_id,
-        "token": player_token,
+        "id": "p" + "".join(random.choices(string.ascii_letters + string.digits, k=6)),
+        "token": "".join(random.choices(string.ascii_letters + string.digits, k=12)),
         "name": req.name,
         "category_id": category["id"],
         "category_name": category["name"],
@@ -197,9 +240,8 @@ async def join_tournament(req: JoinTournamentReq):
         "color": category["color"],
     }
     tournament["players"].append(player)
-    tournament["player_lookup"][player_id] = player
     tournament["last_activity"] = now_ms()
-    return {"player_id": player_id, "token": player_token, "category_id": category["id"]}
+    return {"player_id": player["id"], "token": player["token"]}
 
 
 @router.post("/start")
@@ -207,34 +249,32 @@ async def start_tournament(req: StartTournamentReq):
     tournament = TOURNAMENTS.get(req.code)
     if not tournament:
         raise HTTPException(404, "الغرفة غير موجودة")
-    if tournament.get("host_token") != req.host_token:
+    if tournament["host_token"] != req.host_token:
         raise HTTPException(403, "غير مصرح")
     if len(tournament["players"]) < 2:
         raise HTTPException(400, "يجب وجود لاعبين على الأقل")
-    players = list(tournament["players"])
-    random.shuffle(players)
-    if len(players) == 2:
-        bracket = [_build_match("m1", 1, [players[0]["id"], players[1]["id"]])]
-    elif len(players) == 3:
-        semifinal = _build_match("m1", 1, [players[0]["id"], players[1]["id"]], next_match_id="final")
-        final = _build_match("final", 2, [players[2]["id"]], next_match_id=None)
-        bracket = [semifinal, final]
-    else:
-        round1_matches = []
-        for i in range(0, len(players), 2):
-            if i + 1 < len(players):
-                round1_matches.append(_build_match(f"m{i//2+1}", 1, [players[i]["id"], players[i + 1]["id"]], next_match_id="final"))
-            else:
-                round1_matches.append(_build_match(f"m{i//2+1}", 1, [players[i]["id"]], next_match_id="final"))
-        final = _build_match("final", 2, [], next_match_id=None)
-        bracket = round1_matches + [final]
-    tournament["bracket"] = bracket
+    tournament["bracket"] = _build_bracket(tournament)
     tournament["state"] = "active"
-    tournament["current_match"] = None
-    tournament["winner_id"] = None
-    _advance_to_next_match(tournament)
-    tournament["last_activity"] = now_ms()
-    return {"ok": True, "bracket": bracket}
+    _start_first_match(tournament)
+    return {"ok": True, "bracket": tournament["bracket"]}
+
+
+@router.post("/advance")
+async def advance_tournament(req: AdvanceTournamentReq):
+    tournament = TOURNAMENTS.get(req.code)
+    if not tournament:
+        raise HTTPException(404, "الغرفة غير موجودة")
+    if tournament["host_token"] != req.host_token:
+        raise HTTPException(403, "غير مصرح")
+    current = next((m for m in tournament.get("bracket", []) if m.get("id") == tournament.get("current_match_id")), None)
+    if current and current.get("status") == "active":
+        raise HTTPException(400, "المبارزة الحالية ليست منتهية بعد")
+    for match in tournament.get("bracket", []):
+        if match.get("status") == "pending" and len(match.get("players", [])) >= 2:
+            _activate_match(tournament, match)
+            return {"ok": True, "match": match}
+    tournament["state"] = "finished"
+    return {"ok": True, "finished": True}
 
 
 @router.get("/{code}/state")
@@ -242,7 +282,6 @@ async def get_tournament_state(code: str):
     tournament = TOURNAMENTS.get(code)
     if not tournament:
         raise HTTPException(404, "الغرفة غير موجودة")
-    categories = _categories_for_mode(tournament["mode"])
     return {
         "code": code,
         "host_name": tournament["host_name"],
@@ -250,9 +289,9 @@ async def get_tournament_state(code: str):
         "state": tournament["state"],
         "players": tournament["players"],
         "bracket": tournament.get("bracket", []),
-        "current_match": tournament.get("current_match"),
+        "current_match_id": tournament.get("current_match_id"),
         "winner_id": tournament.get("winner_id"),
-        "categories": categories,
+        "categories": _categories_for_mode(tournament["mode"]),
     }
 
 
@@ -261,7 +300,7 @@ async def answer_tournament(req: AnswerTournamentReq):
     tournament = TOURNAMENTS.get(req.code)
     if not tournament:
         raise HTTPException(404, "الغرفة غير موجودة")
-    match = tournament.get("current_match")
+    match = next((m for m in tournament.get("bracket", []) if m.get("id") == tournament.get("current_match_id")), None)
     if not match or match.get("status") != "active":
         raise HTTPException(400, "لا توجد مبارزة نشطة")
     player = next((p for p in tournament["players"] if p["token"] == req.player_token), None)
@@ -271,31 +310,22 @@ async def answer_tournament(req: AnswerTournamentReq):
         raise HTTPException(400, "ليس دورك")
     question = match.get("question") or {}
     correct = req.answer_idx == question.get("a")
-    player_ids = match["players"]
-    opponent_id = player_ids[1] if player_ids[0] == player["id"] else player_ids[0]
+    p1, p2 = match["players"][0], match["players"][1]
     if correct:
         match["scores"][player["id"]] = match["scores"].get(player["id"], 0) + 1
-        round_winner_id = player["id"]
+        winner_id = player["id"]
     else:
-        match["scores"][opponent_id] = match["scores"].get(opponent_id, 0) + 1
-        round_winner_id = opponent_id
-    match["history"].append({
-        "round": match.get("round_number", 1),
-        "winner_id": round_winner_id,
-        "correct": correct,
-        "player_id": player["id"],
-    })
-    if match["scores"].get(player["id"], 0) >= 2 or match["scores"].get(opponent_id, 0) >= 2:
-        _finalize_match(tournament, match)
-        return {"ok": True, "match_finished": True, "winner_id": match["winner_id"]}
-    if match.get("round_number", 1) >= 3:
-        _finalize_match(tournament, match)
-        return {"ok": True, "match_finished": True, "winner_id": match["winner_id"]}
-    match["round_number"] += 1
-    if match["round_number"] == 2:
-        match["active_player_id"] = opponent_id
+        other_id = p2 if player["id"] == p1 else p1
+        match["scores"][other_id] = match["scores"].get(other_id, 0) + 1
+        winner_id = other_id
+    match["round_results"].append({"round": match["current_round"], "winner_id": winner_id, "correct": correct})
+    if match["scores"].get(p1, 0) >= 2 or match["scores"].get(p2, 0) >= 2 or match["current_round"] >= 3:
+        _finish_match(tournament, match)
+        return {"ok": True, "finished": True, "winner_id": match["winner_id"]}
+    match["current_round"] += 1
+    if match["current_round"] == 2:
+        match["active_player_id"] = p2
     else:
-        match["active_player_id"] = player["id"] if match["scores"].get(player["id"], 0) <= match["scores"].get(opponent_id, 0) else opponent_id
-    match["question"] = _build_question_for_round(tournament, match, match["round_number"])
-    tournament["last_activity"] = now_ms()
-    return {"ok": True, "match_finished": False, "next_round": match["round_number"], "question": match["question"]}
+        match["active_player_id"] = p1
+    _load_question(tournament, match)
+    return {"ok": True, "finished": False, "question": match["question"]}
