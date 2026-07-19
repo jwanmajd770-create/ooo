@@ -1,6 +1,14 @@
 # 300 Arabic Trivia Questions - 20 Categories x 15 Questions
 # Each question: {"q": text, "opts": [4 options], "a": correct_index}
 
+IMAGE_CATEGORIES = [
+    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
+    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
+    {"id": "anime_img", "name": "تحدي الصور - أنمي", "icon": "🎌", "color": "#FF6B9D"},
+    {"id": "brands_img", "name": "تحدي الصور - براندات", "icon": "🏷️", "color": "#FFD700"},
+    {"id": "clubs_img", "name": "تحدي الصور - أندية", "icon": "🏆", "color": "#00FF88"},
+]
+
 CATEGORIES = [
     {"id": "history", "name": "تاريخ عربي وإسلامي", "icon": "🏛️", "color": "#FF4500"},
     {"id": "geography", "name": "جغرافيا العالم", "icon": "🌍", "color": "#00F0FF"},
@@ -22,17 +30,11 @@ CATEGORIES = [
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
     {"id": "business", "name": "اقتصاد وأعمال", "icon": "💰", "color": "#FFFF00"},
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
-    {"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"},
-    {"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"},
-    {"id": "anime_img", "name": "تحدي الصور - أنمي", "icon": "🎌", "color": "#FF6B9D"},
-    {"id": "brands_img", "name": "تحدي الصور - براندات", "icon": "🏷️", "color": "#FFD700"},
-    {"id": "clubs_img", "name": "تحدي الصور - أندية", "icon": "🏆", "color": "#00FF88"},
 ]
 
 FLAGS_CATEGORIES = [
     next(c for c in CATEGORIES if c["id"] == "capitals"),
-    next(c for c in CATEGORIES if c["id"] == "players_img"),
-    next(c for c in CATEGORIES if c["id"] == "actors_img"),
+    *IMAGE_CATEGORIES,
 ]
 
 QUESTIONS = {'history': [{'q': 'في أي عام كانت غزوة بدر الكبرى؟', 'opts': ['2 هـ', '3 هـ', '5 هـ', '8 هـ'], 'a': 0},

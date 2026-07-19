@@ -434,7 +434,7 @@ async def get_categories(mode: str = "classic"):
         return {"categories": FOOTBALL_CATEGORIES}
     if mode == "flags_only":
         return {"categories": FLAGS_CATEGORIES}
-    return {"categories": CATEGORIES}
+    return {"categories": [c for c in CATEGORIES if c["id"] not in {"players_img", "actors_img", "anime_img", "brands_img", "clubs_img"}]}
 
 
 @api_router.get("/stats/leaderboard")
