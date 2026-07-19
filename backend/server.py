@@ -15,12 +15,6 @@ from questions import CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
-
-# إضافة فئات صور جديدة للعبة
-if not any(c["id"] == "players_img" for c in CATEGORIES):
-    CATEGORIES.append({"id": "players_img", "name": "تحدي الصور - لاعبون", "icon": "⚽", "color": "#00F0FF"})
-if not any(c["id"] == "actors_img" for c in CATEGORIES):
-    CATEGORIES.append({"id": "actors_img", "name": "تحدي الصور - ممثلون", "icon": "🎬", "color": "#FF007F"})
 FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
 for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
     QUESTIONS.setdefault(_fc_id, [])
