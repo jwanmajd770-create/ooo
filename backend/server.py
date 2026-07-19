@@ -12,7 +12,7 @@ from typing import Optional, Dict
 from datetime import datetime, timezone
 
 from questions import CATEGORIES, QUESTIONS
-from image_questions import IMAGE_QUESTIONS, QUOTE_QUESTIONS
+from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
 FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
@@ -114,7 +114,6 @@ def _pick_avoiding_repeats(pool, asked_set, key_fn):
 
 def get_random_question(category_id, custom_questions=None, force_image=False, game=None):
     imgs = IMAGE_QUESTIONS.get(category_id, [])
-    quotes = QUOTE_QUESTIONS.get(category_id, [])
     customs = (custom_questions or {}).get(category_id, [])
     # ذاكرة الأسئلة المطروحة لكل غرفة (تمنع التكرار السريع)
     asked = None
@@ -128,8 +127,6 @@ def get_random_question(category_id, custom_questions=None, force_image=False, g
         return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
     if imgs and random.random() < 0.25:
         return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
-    if quotes and random.random() < 0.15:
-        return _pick_avoiding_repeats(quotes, asked, _q_key) if asked is not None else random.choice(quotes)
     if customs and random.random() < 0.20:
         return _pick_avoiding_repeats(customs, asked, _q_key) if asked is not None else random.choice(customs)
     qs = QUESTIONS.get(category_id, [])
