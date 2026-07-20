@@ -713,30 +713,17 @@ def resolve_duel_if_ready(game):
     now = now_ms()
     elapsed = now - d["started_at"]
     timed_out = elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
-    a_ans = d.get("attacker_answer")
-    de_ans = d.get("defender_answer")
-    if solo:
-        if a_ans is None and not timed_out:
-            return
-    else:
-        if not timed_out and (a_ans is None or de_ans is None):
-            return
+    if not timed_out:
+        return
 
     correct = d["question"]["a"]
-    a_correct = a_ans == correct
-    d_correct = de_ans == correct
+    a_correct = False
+    d_correct = False
 
     if solo:
         winner_id = d["attacker_id"] if a_correct else None
     else:
-        if a_correct and d_correct:
-            winner_id = d["attacker_id"] if (d["attacker_time"] or 999999) <= (d["defender_time"] or 999999) else d["defender_id"]
-        elif a_correct:
-            winner_id = d["attacker_id"]
-        elif d_correct:
-            winner_id = d["defender_id"]
-        else:
-            winner_id = d["defender_id"]
+        winner_id = d["defender_id"]
 
     d["resolved"] = True
     d["winner_id"] = winner_id
@@ -844,13 +831,6 @@ async def answer(req: AnswerReq):
     is_correct = (req.answer_idx == correct)
     now_sec = now_ms() / 1000.0
 
-    if turn == "attacker":
-        d["attacker_answer"] = req.answer_idx
-        d["attacker_time"] = now_sec
-    else:
-        d["defender_answer"] = req.answer_idx
-        d["defender_time"] = now_sec
-
     if is_correct:
         d[f"{turn}_stored_time"] = d.get(f"{turn}_stored_time", 0.0)
         d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + 1
@@ -858,10 +838,6 @@ async def answer(req: AnswerReq):
             finish_duel(game, None)
             touch(game)
             return {"ok": True, "correct": True}
-        if d.get("attacker_answer") is not None and d.get("defender_answer") is not None:
-            resolve_duel_if_ready(game)
-            touch(game)
-            return {"ok": True, "correct": True, "resolved": True}
         other = "defender" if turn == "attacker" else "attacker"
         d["turn"] = other
         d["turn_start_ts"] = now_sec
