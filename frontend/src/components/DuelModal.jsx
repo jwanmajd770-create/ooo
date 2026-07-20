@@ -125,6 +125,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const showSoloIntro = countdown !== null && isSolo;
   const showDuelIntro = countdown !== null && !isSolo;
 
+  console.log("DuelModal question:", duel?.question);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
       {showSoloIntro && (
