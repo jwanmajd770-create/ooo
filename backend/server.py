@@ -714,6 +714,7 @@ def resolve_duel_if_ready(game):
     elapsed = now - d["started_at"]
     timed_out = elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
     print(f"RESOLVE_CHECK: timed_out={timed_out}, elapsed={elapsed}, resolved={d.get('resolved')}")
+    print(f"RESOLVE_DETAIL: elapsed={elapsed}, timeout_ms={d.get('timeout_ms')}, timed_out={timed_out}, started_at={d.get('started_at')}, now={now_ms()}")
     if not timed_out:
         return
 
@@ -863,6 +864,7 @@ async def answer(req: AnswerReq):
                                    force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
             d["question"] = newq
+        print(f"ANSWER_END: resolved={d.get('resolved')}, turn={d.get('turn')}")
         touch(game)
         return {"ok": True, "correct": False}
 
