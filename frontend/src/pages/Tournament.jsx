@@ -1,17 +1,18 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../lib/api";
+import DuelModal from "../components/DuelModal";
 import { toast } from "sonner";
 
 const MODES = [
-  { id: "classic", title: "كلاسيكي", icon: "🎮" },
-  { id: "flags_only", title: "أعلام والصور", icon: "🏁" },
+  { id: "classic", title: "كلاسيكي", icon: "🎯" },
+  { id: "flags_only", title: "أعلام والصور", icon: "🚩" },
   { id: "football", title: "كرة القدم", icon: "⚽" },
 ];
 
 const ROLES = [
   { id: "host", title: "مقدم", icon: "👑" },
-  { id: "player", title: "متسابق", icon: "🎯" },
+  { id: "player", title: "متسابق", icon: "⚔️" },
 ];
 
 export default function Tournament() {
@@ -49,8 +50,13 @@ export default function Tournament() {
     try {
       const data = await fetch(`${API}/tournament/${roomCode}/state`).then((res) => res.json());
       setRoom(data);
-      if (data.state === "active" && step !== "bracket") {
+
+      if (data.state === "bracket" && step !== "bracket") {
         setStep("bracket");
+      } else if (data.state === "match" && step !== "match") {
+        setStep("match");
+      } else if (data.state === "finished" && step !== "finished") {
+        setStep("finished");
       }
     } catch {
       // ignore
@@ -58,7 +64,7 @@ export default function Tournament() {
   }, [code, step]);
 
   useEffect(() => {
-    if (!code || !["host-lobby", "player-lobby", "bracket"].includes(step)) return;
+    if (!code || !["host-lobby", "player-lobby", "bracket", "match"].includes(step)) return;
     const timer = setInterval(() => refreshState(code), 2000);
     return () => clearInterval(timer);
   }, [code, refreshState, step]);
@@ -78,7 +84,7 @@ export default function Tournament() {
       setPlayerId("");
       setRoom({ code: data.code, host_name: hostName || "المقدم", mode, state: "lobby", players: [], bracket: [] });
       setStep("host-lobby");
-      toast.success("تم إنشاء غرفة مبارزات مباشرة");
+      toast.success("تم إنشاء غرفة جديدة");
     } catch {
       toast.error("فشل إنشاء الغرفة");
     } finally {
@@ -119,32 +125,81 @@ export default function Tournament() {
       });
       await refreshState(code);
       setStep("bracket");
-      toast.success("بدأت المبارزة");
+      toast.success("بدأت البطولة");
     } catch {
-      toast.error("فشل البدء");
+      toast.error("فشل بدء البطولة");
     } finally {
       setLoading(false);
     }
   };
 
-  const advanceTournament = async () => {
+  const startMatch = async (matchId) => {
     if (!code || !hostToken) return;
     setLoading(true);
     try {
-      await fetch(`${API}/tournament/advance`, {
+      await fetch(`${API}/tournament/start-match`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, host_token: hostToken }),
+        body: JSON.stringify({ code, host_token: hostToken, match_id: matchId }),
       });
       await refreshState(code);
+      setStep("match");
+      toast.success("بدأت المباراة");
     } catch {
-      toast.error("فشل بدء المبارزة التالية");
+      toast.error("فشل بدء المباراة");
     } finally {
       setLoading(false);
     }
   };
 
+  const answerTournament = async (idx) => {
+    if (!code || !playerToken) {
+      throw new Error("لم يتم تسجيل اللاعب");
+    }
+    const res = await fetch(`${API}/tournament/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, player_token: playerToken, answer_idx: idx }),
+    });
+    const data = await res.json();
+    await refreshState(code);
+    return data;
+  };
+
   const playerMap = useMemo(() => Object.fromEntries((room?.players || []).map((player) => [player.id, player])), [room]);
+  const currentMatch = useMemo(() => room?.bracket?.find((match) => match.id === room.current_match_id) || null, [room]);
+  const myRole = useMemo(() => {
+    const players = currentMatch?.players || [];
+    if (playerId && players[0] === playerId) return "attacker";
+    if (playerId && players[1] === playerId) return "defender";
+    return "spectator";
+  }, [currentMatch, playerId]);
+
+  const duelForModal = useMemo(() => {
+    if (!room || !currentMatch || room.state !== "match") return null;
+    const [attackerId, defenderId] = currentMatch.players || [];
+    const attacker = room.players?.find((player) => player.id === attackerId) || null;
+    const defender = room.players?.find((player) => player.id === defenderId) || null;
+    return {
+      attacker_id: attackerId,
+      defender_id: defenderId || null,
+      attacker_answered: false,
+      defender_answered: false,
+      question: currentMatch.question || { q: "لا توجد أسئلة", opts: ["أ", "ب", "ج", "د"], a: 0 },
+      category: currentMatch.category_name || "مبارزة",
+      resolved: false,
+      winner_id: null,
+      started_at: Date.now(),
+      timeout_ms: 12000,
+      turn: currentMatch.active_player_id === attackerId ? "attacker" : "defender",
+      turn_start_ts: Date.now() / 1000,
+      attacker_stored_time: 12,
+      defender_stored_time: 12,
+      attacker_answer: null,
+      defender_answer: null,
+      scores: currentMatch.scores || {},
+    };
+  }, [currentMatch, room]);
 
   return (
     <div className="min-h-screen bg-[#05070b] px-4 py-8 text-white" dir="rtl">
@@ -152,7 +207,7 @@ export default function Tournament() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-black text-orange-400">مبارزات مباشرة</h1>
-            <p className="text-gray-400">خطوات بسيطة · اختيار الوضع ثم الدور ثم الغرفة</p>
+            <p className="text-gray-400">تدفق واضح · اختيار الوضع ثم الدور ثم الغرفة</p>
           </div>
           <button onClick={() => navigate("/")} className="rounded-lg border border-white/10 px-4 py-2">
             العودة
@@ -170,7 +225,7 @@ export default function Tournament() {
                     setMode(item.id);
                     setStep("role");
                   }}
-                  className={`rounded-2xl border p-4 text-right ${mode === item.id ? "border-orange-400 bg-orange-500/20" : "border-white/10 bg-white/5"}`}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4 text-right"
                 >
                   <div className="text-3xl">{item.icon}</div>
                   <div className="mt-2 font-bold">{item.title}</div>
@@ -191,7 +246,7 @@ export default function Tournament() {
                     setRole(item.id);
                     setStep(item.id === "host" ? "host-form" : "player-form");
                   }}
-                  className={`rounded-2xl border p-4 text-right ${role === item.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5"}`}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4 text-right"
                 >
                   <div className="text-3xl">{item.icon}</div>
                   <div className="mt-2 font-bold">{item.title}</div>
@@ -210,7 +265,7 @@ export default function Tournament() {
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
             <h2 className="mb-3 text-lg font-bold">الخطوة 3: إنشاء غرفة</h2>
             <label className="mb-2 block text-sm text-gray-400">اسم المقدم</label>
-            <input value={hostName} onChange={(e) => setHostName(e.target.value)} className="w-full rounded-lg bg-black/50 p-3" />
+            <input value={hostName} onChange={(e) => setHostName(e.target.value)} placeholder="المقدم" className="w-full rounded-lg bg-black/50 p-3" />
             <button onClick={createRoom} disabled={loading} className="mt-4 w-full rounded-lg bg-orange-500 px-4 py-3 font-bold disabled:opacity-60">
               إنشاء غرفة
             </button>
@@ -223,7 +278,7 @@ export default function Tournament() {
               <h2 className="text-xl font-bold">غرفة الاستقبال</h2>
               <span className="text-2xl font-black text-orange-400">{room.code}</span>
             </div>
-            <p className="mb-4 text-gray-400">رمز الغرفة أعلاه. انتظر اللاعبين ثم ابدأ المبارزة عندما يصبحوا اثنين أو أكثر.</p>
+            <p className="mb-4 text-gray-400">رمز الغرفة أعلاه. انتظر اللاعبين ثم ابدأ البطولة عندما يصبحوا اثنين أو أكثر.</p>
             <div className="grid gap-2">
               {room.players?.length ? room.players.map((player) => (
                 <div key={player.id} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
@@ -234,7 +289,7 @@ export default function Tournament() {
             </div>
             {room.players?.length >= 2 && (
               <button onClick={startTournament} disabled={loading} className="mt-4 rounded-lg bg-green-600 px-4 py-3 font-bold disabled:opacity-60">
-                ابدأ المبارزة
+                ابدأ البطولة
               </button>
             )}
           </div>
@@ -269,8 +324,8 @@ export default function Tournament() {
 
         {step === "player-lobby" && room && (
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-            <h2 className="mb-3 text-xl font-bold">في انتظار المقدم...</h2>
-            <p className="mb-4 text-gray-400">سيظهر الجدول هنا بمجرد أن يبدأ المقدم المبارزة.</p>
+            <h2 className="mb-3 text-xl font-bold">في انتظار بدء البطولة...</h2>
+            <p className="mb-4 text-gray-400">سيظهر الجدول هنا بمجرد أن يبدأ المقدم البطولة.</p>
             <div className="grid gap-2">
               {room.players?.length ? room.players.map((player) => (
                 <div key={player.id} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
@@ -286,10 +341,9 @@ export default function Tournament() {
           <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">الجدول</h2>
+                <h2 className="text-xl font-bold">الجدول - دور خروج المغلوب</h2>
                 <span className="text-sm text-gray-400">الرمز: {room.code}</span>
               </div>
-
               <div className="space-y-3">
                 {room.bracket?.length ? room.bracket.map((match) => {
                   const isActive = room.current_match_id === match.id;
@@ -312,12 +366,10 @@ export default function Tournament() {
                           <p className="mt-1 text-sm text-gray-400">
                             الحالة: {isFinished ? "منتهية" : isActive ? "نشطة" : "قيد الانتظار"}
                           </p>
-                          {winner && (
-                            <p className="mt-1 text-sm text-green-300">الفائز: {winner.name}</p>
-                          )}
+                          {winner && <p className="mt-1 text-sm text-green-300">الفائز: {winner.name}</p>}
                         </div>
                         {role === "host" && isPending && (
-                          <button onClick={advanceTournament} disabled={loading} className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold disabled:opacity-60">
+                          <button onClick={() => startMatch(match.id)} disabled={loading} className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold disabled:opacity-60">
                             ابدأ هذه المباراة
                           </button>
                         )}
@@ -326,12 +378,6 @@ export default function Tournament() {
                   );
                 }) : <p className="text-gray-400">لن يظهر الجدول إلا بعد بدء البطولة.</p>}
               </div>
-
-              {room.state === "finished" && room.winner_id && (
-                <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-green-300">
-                  الفائز النهائي: {playerMap[room.winner_id]?.name || "—"}
-                </div>
-              )}
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
@@ -345,6 +391,42 @@ export default function Tournament() {
                 )) : <p className="text-gray-400">لا يوجد لاعبين بعد.</p>}
               </div>
             </div>
+          </div>
+        )}
+
+        {step === "match" && room && (
+          <div className="space-y-4">
+            {currentMatch && (
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-gray-400">
+                دورك: {myRole === "attacker" ? "مهاجم" : myRole === "defender" ? "مدافع" : "مراقب"}
+              </div>
+            )}
+            {duelForModal && (
+              <DuelModal
+                duel={duelForModal}
+                meId={playerId || null}
+                players={room.players || []}
+                onAnswer={answerTournament}
+                onPass={async () => ({ ok: true })}
+                onSkip={async () => {}}
+                onTime={async () => {}}
+                onEye={async () => {}}
+                myPowerups={{}}
+                eyeHint={null}
+                duelTimeoutMs={12000}
+              />
+            )}
+          </div>
+        )}
+
+        {step === "finished" && room && (
+          <div className="rounded-2xl border border-white/10 bg-black/30 p-6 text-center">
+            <div className="text-5xl">🏆</div>
+            <h2 className="mt-3 text-2xl font-black">البطولة انتهت</h2>
+            <p className="mt-2 text-gray-400">الفائز: {playerMap[room.winner_id]?.name || "—"}</p>
+            <button onClick={() => navigate("/")} className="mt-6 rounded-lg bg-orange-500 px-4 py-3 font-bold">
+              العودة للرئيسية
+            </button>
           </div>
         )}
       </div>
