@@ -128,6 +128,23 @@ export default function Tournament() {
     }
   };
 
+  const advanceTournament = async () => {
+    if (!code || !hostToken) return;
+    setLoading(true);
+    try {
+      await fetch(`${API}/tournament/advance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, host_token: hostToken }),
+      });
+      await refreshState(code);
+    } catch {
+      toast.error("فشل بدء المبارزة التالية");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const playerMap = useMemo(() => Object.fromEntries((room?.players || []).map((p) => [p.id, p])), [room]);
   const shouldShowBracket = showBracket || room?.state === "active";
 
@@ -189,7 +206,7 @@ export default function Tournament() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 3 && !room && (
           <>
             {role === "host" ? (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
@@ -253,7 +270,7 @@ export default function Tournament() {
             </div>
             <p className="mb-4 text-gray-400">
               {role === "host"
-                ? "في انتظار اللاعبين. عند دخول لاعبين اثنين أو أكثر، يمكنك عرض الجدول." 
+                ? "في انتظار اللاعبين. عند دخول لاعبين اثنين أو أكثر، يمكنك البدء بالمبارزة." 
                 : "تم تسجيلك في الغرفة. انتظر حتى يبدأ المقدم البطولة."}
             </p>
             <div className="grid gap-2">
@@ -266,8 +283,8 @@ export default function Tournament() {
             </div>
             {role === "host" && room.players?.length >= 2 && (
               <div className="mt-4">
-                <button onClick={() => setShowBracket(true)} className="rounded-lg bg-white/10 px-4 py-2">
-                  عرض الجدول
+                <button onClick={startTournament} disabled={loading} className="rounded-lg bg-cyan-500 px-4 py-2 font-bold disabled:opacity-60">
+                  ابدأ المبارزة
                 </button>
               </div>
             )}
@@ -290,7 +307,7 @@ export default function Tournament() {
                     </p>
                     <p className="mt-1 text-sm text-gray-400">الحالة: {match.status}</p>
                     {role === "host" && (
-                      <button onClick={() => startTournament(match.id)} disabled={loading} className="mt-3 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold disabled:opacity-60">
+                      <button onClick={advanceTournament} disabled={loading} className="mt-3 rounded-lg bg-cyan-500 px-3 py-2 text-sm font-bold disabled:opacity-60">
                         ابدأ المبارزة
                       </button>
                     )}
