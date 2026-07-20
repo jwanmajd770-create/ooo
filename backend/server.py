@@ -713,6 +713,7 @@ def resolve_duel_if_ready(game):
     now = now_ms()
     elapsed = now - d["started_at"]
     timed_out = elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
+    print(f"RESOLVE_CHECK: timed_out={timed_out}, elapsed={elapsed}, resolved={d.get('resolved')}")
     if not timed_out:
         return
 
@@ -830,6 +831,7 @@ async def answer(req: AnswerReq):
     correct = d["question"]["a"]
     is_correct = (req.answer_idx == correct)
     now_sec = now_ms() / 1000.0
+    print(f"ANSWER: turn={d.get('turn')}, correct={correct}, is_solo={is_solo}")
 
     if is_correct:
         d[f"{turn}_stored_time"] = d.get(f"{turn}_stored_time", 0.0)
@@ -856,6 +858,7 @@ async def answer(req: AnswerReq):
         current_stored = d.get(f"{turn}_stored_time", 0)
         d[f"{turn}_stored_time"] = max(0.0, current_stored - 3.0)
         d["turn_start_ts"] = now_sec
+        print(f"WRONG: stored_time={d.get(f'{turn}_stored_time')}, resolved={d.get('resolved')}")
         newq = get_random_question(d["category"], game.get("custom_questions"),
                                    force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
