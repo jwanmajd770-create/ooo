@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API } from "../lib/api";
+import DuelModal from "../components/DuelModal";
 import { toast } from "sonner";
 
 const MODES = [
@@ -26,7 +27,10 @@ export default function Tournament() {
   const [categories, setCategories] = useState([]);
   const [room, setRoom] = useState(null);
   const [hostToken, setHostToken] = useState("");
+  const [playerToken, setPlayerToken] = useState("");
+  const [playerId, setPlayerId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [eyeHint, setEyeHint] = useState(null);
 
   useEffect(() => {
     const apiMode = mode === "football" ? "football" : mode === "flags_only" ? "flags_only" : "classic";
@@ -72,6 +76,8 @@ export default function Tournament() {
       const data = await res.json();
       setCode(data.code);
       setHostToken(data.host_token);
+      setPlayerToken("");
+      setPlayerId("");
       setRoom({ code: data.code, host_name: hostName || "المقدم", mode, state: "lobby", players: [], bracket: [] });
       setStep("host-lobby");
       toast.success("تم إنشاء غرفة مبارزات مباشرة");
@@ -91,7 +97,9 @@ export default function Tournament() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, name, category_id: category }),
       });
-      await res.json();
+      const data = await res.json();
+      setPlayerToken(data.token);
+      setPlayerId(data.player_id);
       await refreshState(code);
       setStep("player-lobby");
       toast.success("تم الانضمام إلى البطولة");
@@ -140,6 +148,62 @@ export default function Tournament() {
 
   const playerMap = useMemo(() => Object.fromEntries((room?.players || []).map((player) => [player.id, player])), [room]);
   const currentMatch = useMemo(() => room?.bracket?.find((match) => match.id === room.current_match_id) || null, [room]);
+  const duelModalVisible = step === "bracket" && !!currentMatch && currentMatch.status === "active";
+
+  const duelForModal = useMemo(() => {
+    if (!duelModalVisible || !currentMatch) return null;
+    const [attackerId, defenderId] = currentMatch.players || [];
+    const attacker = room?.players?.find((player) => player.id === attackerId);
+    const defender = room?.players?.find((player) => player.id === defenderId);
+    return {
+      attacker_id: attackerId,
+      defender_id: defenderId || null,
+      attacker_answered: false,
+      defender_answered: false,
+      question: currentMatch.question || { q: "لا توجد أسئلة", opts: ["أ", "ب", "ج", "د"], a: 0 },
+      category: attacker?.category_name || defender?.category_name || "مبارزة",
+      resolved: false,
+      winner_id: null,
+      started_at: Date.now(),
+      timeout_ms: 12000,
+      turn: currentMatch.active_player_id === attackerId ? "attacker" : "defender",
+      turn_start_ts: Date.now() / 1000,
+      attacker_stored_time: 12,
+      defender_stored_time: 12,
+      attacker_answer: null,
+      defender_answer: null,
+      scores: currentMatch.scores || {},
+    };
+  }, [currentMatch, duelModalVisible, room?.players]);
+
+  const answerTournament = useCallback(async (idx) => {
+    if (!code || !playerToken) {
+      throw new Error("لم يتم تسجيل لاعب في هذه الغرفة");
+    }
+    const res = await fetch(`${API}/tournament/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, player_token: playerToken, answer_idx: idx }),
+    });
+    const data = await res.json();
+    await refreshState(code);
+    if (data.finished) {
+      setStep("bracket");
+      setEyeHint(null);
+    }
+    return data;
+  }, [code, playerToken, refreshState]);
+
+  const duelPass = useCallback(async () => ({ ok: true }), []);
+  const duelSkip = useCallback(async () => {
+    setEyeHint(null);
+  }, []);
+  const duelTime = useCallback(async () => {
+    setEyeHint(null);
+  }, []);
+  const duelEye = useCallback(async () => {
+    setEyeHint(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#05070b] px-4 py-8 text-white" dir="rtl">
@@ -278,31 +342,28 @@ export default function Tournament() {
         )}
 
         {step === "bracket" && room && (
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-bold">الجدول</h2>
-                <span className="text-sm text-gray-400">الرمز: {room.code}</span>
-              </div>
-
-              {currentMatch?.status === "active" ? (
-                <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 p-4">
-                  <p className="text-sm text-orange-300">المبارزة جارية</p>
-                  <p className="mt-2 font-bold">{currentMatch.players?.map((pid) => playerMap[pid]?.name || "—").join(" vs ")}</p>
-                  <p className="mt-1 text-sm text-gray-400">الجولة: {currentMatch.current_round}</p>
-                  <p className="mt-1 text-sm text-gray-400">النتيجة: {currentMatch.scores?.[currentMatch.players?.[0]] || 0} - {currentMatch.scores?.[currentMatch.players?.[1]] || 0}</p>
-                  {currentMatch.question && (
-                    <div className="mt-3 rounded-lg bg-black/30 p-3">
-                      <p className="font-bold">{currentMatch.question.q}</p>
-                      <div className="mt-2 space-y-1 text-sm text-gray-400">
-                        {currentMatch.question.opts?.map((opt, index) => (
-                          <div key={index}>{index + 1}. {opt}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+          duelModalVisible ? (
+            <DuelModal
+              duel={duelForModal}
+              meId={playerId || null}
+              players={room.players || []}
+              onAnswer={answerTournament}
+              onPass={duelPass}
+              onSkip={duelSkip}
+              onTime={duelTime}
+              onEye={duelEye}
+              myPowerups={{}}
+              eyeHint={eyeHint}
+              duelTimeoutMs={12000}
+            />
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-xl font-bold">الجدول</h2>
+                  <span className="text-sm text-gray-400">الرمز: {room.code}</span>
                 </div>
-              ) : (
+
                 <div className="space-y-3">
                   {room.bracket?.length ? room.bracket.map((match) => (
                     <div key={match.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -314,33 +375,33 @@ export default function Tournament() {
                     </div>
                   )) : <p className="text-gray-400">لن يظهر الجدول إلا بعد بدء البطولة.</p>}
                 </div>
-              )}
 
-              {role === "host" && room.state === "active" && (!currentMatch || currentMatch.status !== "active") && (
-                <button onClick={advanceTournament} disabled={loading} className="mt-4 rounded-lg bg-cyan-500 px-4 py-3 font-bold disabled:opacity-60">
-                  ابدأ المبارزة التالية
-                </button>
-              )}
+                {role === "host" && room.state === "active" && (
+                  <button onClick={advanceTournament} disabled={loading} className="mt-4 rounded-lg bg-cyan-500 px-4 py-3 font-bold disabled:opacity-60">
+                    ابدأ المبارزة التالية
+                  </button>
+                )}
 
-              {room.state === "finished" && room.winner_id && (
-                <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-green-300">
-                  الفائز: {playerMap[room.winner_id]?.name || "—"}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-              <h2 className="text-xl font-bold">اللاعبون</h2>
-              <div className="mt-4 space-y-2">
-                {room.players?.length ? room.players.map((player) => (
-                  <div key={player.id} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
-                    <span>{player.name}</span>
-                    <span className="text-sm text-gray-400">{player.category_name}</span>
+                {room.state === "finished" && room.winner_id && (
+                  <div className="mt-4 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-green-300">
+                    الفائز: {playerMap[room.winner_id]?.name || "—"}
                   </div>
-                )) : <p className="text-gray-400">لا يوجد لاعبين بعد.</p>}
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                <h2 className="text-xl font-bold">اللاعبون</h2>
+                <div className="mt-4 space-y-2">
+                  {room.players?.length ? room.players.map((player) => (
+                    <div key={player.id} className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2">
+                      <span>{player.name}</span>
+                      <span className="text-sm text-gray-400">{player.category_name}</span>
+                    </div>
+                  )) : <p className="text-gray-400">لا يوجد لاعبين بعد.</p>}
+                </div>
               </div>
             </div>
-          </div>
+          )
         )}
       </div>
     </div>
