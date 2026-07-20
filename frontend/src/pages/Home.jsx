@@ -8,7 +8,6 @@ const MODES = [
   { id: "classic",    title: "🎯 كلاسيكي",        desc: "كل الفئات · 12 ثانية",       color: "#22d3ee" },
   { id: "flags_only", title: "🚩 بطولة الأعلام",   desc: "أعلام فقط · 6 ثواني ⚡",      color: "#facc15" },
   { id: "football",   title: "⚽ بطولة كرة القدم", desc: "19 فئة كروية · اختر فئتك",   color: "#4ade80" },
-  { id: "tournament", title: "🥇 مبارزات مباشرة", desc: "دوريات مباشرة · بطولات 1 ضد 1", color: "#fb923c" },
 ];
 
 export default function Home() {
@@ -138,13 +137,7 @@ export default function Home() {
                 <button
                   key={m.id}
                   data-testid={`mode-${m.id}`}
-                  onClick={() => {
-                    if (m.id === "tournament") {
-                      nav("/tournament");
-                      return;
-                    }
-                    setGameMode(m.id);
-                  }}
+                  onClick={() => setGameMode(m.id)}
                   className="card-dark p-6 transition-all text-center hover:scale-[1.03]"
                   style={{ borderColor: m.color + "40" }}
                 >

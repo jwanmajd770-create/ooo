@@ -20,7 +20,6 @@ export default function HostRoom() {
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
   const [mutedPlayers, setMutedPlayers] = useState({});
-  const [selectedTournamentPlayers, setSelectedTournamentPlayers] = useState([]);
   const kickPlayer = async (playerId, playerName) => {
     if (!window.confirm(`طرد اللاعب "${playerName}" من الغرفة؟`)) return;
     try {
@@ -95,33 +94,6 @@ export default function HostRoom() {
     } catch (e) {
       toast.error(e?.response?.data?.detail || "فشل");
     }
-  };
-
-  const startTournamentDuel = async (player1Id, player2Id) => {
-    try {
-      await api.startTournamentDuel(code, hostToken, player1Id, player2Id);
-      setSelectedTournamentPlayers([]);
-      toast.success("بدأت مبارزة مباشرة");
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل بدء المبارزة");
-    }
-  };
-
-  const toggleTournamentSelection = (playerId) => {
-    setSelectedTournamentPlayers((prev) => {
-      if (prev.includes(playerId)) {
-        return prev.filter((id) => id !== playerId);
-      }
-      if (prev.length === 1) {
-        const nextPair = [prev[0], playerId];
-        if (nextPair[0] !== nextPair[1]) {
-          void startTournamentDuel(nextPair[0], nextPair[1]);
-          return [];
-        }
-        return [playerId];
-      }
-      return [playerId];
-    });
   };
 
   const copyPin = () => {
@@ -219,30 +191,6 @@ export default function HostRoom() {
             </div>
             <div className="flex flex-col gap-3">
               <Leaderboard players={state.players} currentPlayer={state.current_player} />
-              {state.state === "active" && (!state.duel || state.duel.resolved) && state.players.filter((p) => !p.eliminated).length >= 2 && (
-                <div className="card-dark p-3">
-                  <div className="text-xs text-gray-400 mb-2 font-bold">مبارزات مباشرة</div>
-                  <p className="text-sm text-gray-400 mb-3">اختر لاعبين اثنين لبدء مبارزة مباشرة. الخاسر يُقصى والفائز يبقى.</p>
-                  <div className="grid grid-cols-1 gap-2">
-                    {state.players.map((p) => {
-                      const selected = selectedTournamentPlayers.includes(p.id);
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => toggleTournamentSelection(p.id)}
-                          disabled={p.eliminated}
-                          className={`rounded-lg border px-3 py-2 text-right text-sm transition-all ${selected ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5 hover:bg-white/10"} ${p.eliminated ? "opacity-50" : ""}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span>{p.name}</span>
-                            <span className="text-xs text-gray-400">{p.eliminated ? "مُقصى" : "مُتاح"}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
               <div className="card-dark p-3">
                 <div className="text-xs text-gray-400 mb-2 font-bold">إدارة اللاعبين</div>
                 {state.players.filter(p => !p.is_bot).map((p) => (

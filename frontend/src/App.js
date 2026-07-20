@@ -5,7 +5,6 @@ import HostRoom from "./pages/HostRoom";
 import PlayerRoom from "./pages/PlayerRoom";
 import SpectatorRoom from "./pages/SpectatorRoom";
 import HallOfFame from "./pages/HallOfFame";
-import Tournament from "./pages/Tournament";
 import "./App.css";
 
 function App() {
@@ -18,7 +17,6 @@ function App() {
           <Route path="/play/:code" element={<PlayerRoom />} />
           <Route path="/watch/:code" element={<SpectatorRoom />} />
           <Route path="/hall" element={<HallOfFame />} />
-          <Route path="/tournament" element={<Tournament />} />
         </Routes>
       </BrowserRouter>
       <Toaster richColors position="top-center" theme="dark" />

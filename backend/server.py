@@ -15,7 +15,6 @@ from questions import CATEGORIES, FLAGS_CATEGORIES, QUESTIONS
 from image_questions import IMAGE_QUESTIONS
 from stats import save_game_result, get_hall_of_fame, get_recent_games
 from football_data import FOOTBALL_CATEGORIES, FOOTBALL_QUESTIONS
-from tournament import router as tournament_router
 FOOTBALL_CATEGORY_IDS = {c["id"] for c in FOOTBALL_CATEGORIES}
 for _fc_id, _fc_qs in FOOTBALL_QUESTIONS.items():
     QUESTIONS.setdefault(_fc_id, [])
@@ -357,13 +356,6 @@ class StartGameReq(BaseModel):
     host_token: str
 
 
-class TournamentSetupReq(BaseModel):
-    code: str
-    host_token: str
-    player1_id: str
-    player2_id: str
-
-
 class AttackReq(BaseModel):
     code: str
     player_token: str
@@ -624,69 +616,6 @@ async def start_game(req: StartGameReq):
     next_turn(game)
     touch(game)
     return {"ok": True}
-
-
-def _start_direct_duel(game, attacker_id: str, defender_id: str):
-    attacker = next((p for p in game["players"] if p["id"] == attacker_id), None)
-    defender = next((p for p in game["players"] if p["id"] == defender_id), None)
-    if not attacker or not defender:
-        raise HTTPException(404, "لا يوجد لاعب بهذه الهوية")
-    if attacker.get("eliminated") or defender.get("eliminated"):
-        raise HTTPException(400, "لا يمكن بدء مبارزة بين لاعب eliminado")
-    if attacker_id == defender_id:
-        raise HTTPException(400, "اختر لاعبين مختلفين")
-
-    if game.get("mode") == "flags_only":
-        flags_allowed_ids = {c["id"] for c in FLAGS_CATEGORIES}
-        category = attacker["category_id"] if attacker["category_id"] in flags_allowed_ids else "capitals"
-    else:
-        category = attacker["category_id"]
-
-    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
-    if not question:
-        raise HTTPException(500, "لا توجد أسئلة")
-
-    target = find_free_cell(game)
-    now = now_ms()
-    game["duel"] = {
-        "attacker_id": attacker_id,
-        "defender_id": defender_id,
-        "target": list(target) if target else [0, 0],
-        "category": category,
-        "question": question,
-        "started_at": now,
-        "timeout_ms": DUEL_TIMEOUT_MS,
-        "attacker_stored_time": DUEL_TIMEOUT_MS / 1000.0,
-        "defender_stored_time": DUEL_TIMEOUT_MS / 1000.0,
-        "turn": "attacker",
-        "turn_start_ts": now / 1000.0,
-        "attacker_answer": None,
-        "defender_answer": None,
-        "attacker_time": None,
-        "defender_time": None,
-        "attacker_correct_count": 0,
-        "defender_correct_count": 0,
-        "resolved": False,
-        "winner_id": None,
-    }
-    game["state"] = "duel"
-    game["pending_action"] = None
-    touch(game)
-    return {"ok": True}
-
-
-@api_router.post("/rooms/tournament/setup")
-async def setup_tournament_duel(req: TournamentSetupReq):
-    game = GAMES.get(req.code)
-    if not game:
-        raise HTTPException(404, "الغرفة غير موجودة")
-    if game["host_token"] != req.host_token:
-        raise HTTPException(403, "غير مصرح")
-    if game.get("state") != "active":
-        raise HTTPException(400, "الغرفة ليست في وضع اللعب")
-    if game.get("duel") and not game["duel"].get("resolved"):
-        raise HTTPException(400, "مبارزة نشطة بالفعل")
-    return _start_direct_duel(game, req.player1_id, req.player2_id)
 
 
 @api_router.post("/rooms/attack")
@@ -1154,7 +1083,6 @@ async def tick(code: str):
 
 
 app.include_router(api_router)
-app.include_router(tournament_router)
 
 app.add_middleware(
     CORSMiddleware,
