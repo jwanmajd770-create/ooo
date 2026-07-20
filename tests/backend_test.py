@@ -160,12 +160,24 @@ def test_two_player_duel_only_resolves_when_both_players_are_out_of_time():
     assert game["duel"]["resolved"] is True
 
 
+def test_two_player_start_positions_have_a_gap():
+    code = "T7"
+    game = make_game(code)
+    p1, p2 = add_players(game)
+    game["host_token"] = "host"
+
+    req = server.StartGameReq(code=code, host_token="host")
+    asyncio.run(server.start_game(req))
+
+    positions = [(r, c) for r, row in enumerate(game["grid"]) for c, cell in enumerate(row) if cell in {p1["id"], p2["id"]}]
+    assert positions == [(2, 2), (2, 4)]
+
+
 def test_sudden_death_on_expiry():
     code = "T4"
     game = make_game(code)
     p1, p2 = add_players(game)
     game["grid"][3][3] = p2["id"]
-    # craft duel with tiny remaining time
     now_ts = time.time()
     game["duel"] = {
         "attacker_id": p1["id"],
@@ -174,12 +186,17 @@ def test_sudden_death_on_expiry():
         "category": "science",
         "question": {"q": "x", "opts": ["a", "b", "c", "d"], "a": 0},
         "turn": "attacker",
-        "turn_start_ts": now_ts - 1.0,
-        "attacker_stored_time": 0.5,
+        "turn_start_ts": now_ts - 4.0,
+        "attacker_stored_time": 0.0,
         "defender_stored_time": server.FLOOR_DUEL_INIT_TIME,
         "resolved": False,
     }
-    # calling tick should resolve sudden death
+    asyncio.run(server.tick(code))
+    d = game.get("duel")
+    assert d.get("resolved") is False
+
+    game["duel"]["defender_stored_time"] = 0.0
+    game["duel"]["started_at"] = server.now_ms() - 10000
     asyncio.run(server.tick(code))
     d = game.get("duel")
     assert d.get("resolved") is True

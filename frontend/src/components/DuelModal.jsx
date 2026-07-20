@@ -7,7 +7,6 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
-  const timerStartRef = useRef(null);
   const lastTickSec = useRef(null);
   const lastResolved = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -30,7 +29,6 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     }
     if (lastDuelStart.current !== duel.started_at && !duel.resolved) {
       lastDuelStart.current = duel.started_at;
-      timerStartRef.current = null;
       sfx.resume();
 
       const isSolo = !duel.defender_id;
@@ -44,7 +42,6 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
         }, 3000);
         const t4 = setTimeout(() => {
           setCountdown(null);
-          timerStartRef.current = Date.now() / 1000;
         }, 3600);
         return () => { [t1, t2, t3, t4].forEach(clearTimeout); };
       }
@@ -56,7 +53,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       const t3 = setTimeout(() => { setCountdown(2); sfx.introTick(3); }, 3000);
       const t4 = setTimeout(() => { setCountdown(1); sfx.introTick(4); }, 4000);
       const t5 = setTimeout(() => { sfx.duelStart(); setCountdown("انطلق!"); sfx.introTick(5); }, 5000);
-      const t6 = setTimeout(() => { setCountdown(null); timerStartRef.current = Date.now() / 1000; }, 5600);
+      const t6 = setTimeout(() => { setCountdown(null); }, 5600);
       return () => { [t1, t2, t3, t4, t5, t6].forEach(clearTimeout); };
     }
   }, [duel?.started_at, duel?.resolved]);
@@ -96,30 +93,20 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const showResult = duel.resolved;
   const correct = showResult ? duel.question.a : null;
   const nowSec = Date.now() / 1000;
-  // نظام المؤقّت الموحّد: العدّاد يبدأ بعد انتهاء العدّ التمهيدي (3-2-1-انطلق)
   const isTurnBased = duel.turn === "attacker" || duel.turn === "defender";
   const totalSec = (duel.timeout_ms ? duel.timeout_ms : duelTimeoutMs) / 1000;
   const isSolo = !duel.defender_id;
-  // إذا فات العدّ التمهيدي (انضمام متأخر/إعادة تحميل) استخدم started_at من السيرفر
-  if (timerStartRef.current === null && countdown === null && duel.started_at) {
-    timerStartRef.current = duel.started_at / 1000 + (isSolo ? 3.2 : 5.2);
-  }
-  const timerStart = timerStartRef.current;
-  const sharedRem = (countdown !== null || timerStart === null)
-    ? totalSec
-    : Math.max(0, totalSec - (nowSec - timerStart));
   const attStored = duel.attacker_stored_time ?? totalSec;
   const defStored = duel.defender_stored_time ?? totalSec;
-  // أثناء العدّ التمهيدي (3-2-1) العدّاد ثابت على الرصيد المخزّن
   const introActive = countdown !== null;
   const turnElapsed = introActive ? 0 : Math.max(0, nowSec - (duel.turn_start_ts || nowSec));
   const attRem = isTurnBased
     ? (duel.turn === "attacker" ? Math.max(0, attStored - turnElapsed) : attStored)
-    : sharedRem;
+    : totalSec;
   const defRem = isTurnBased
     ? (duel.turn === "defender" ? Math.max(0, defStored - turnElapsed) : defStored)
-    : sharedRem;
-  const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : sharedRem) <= 3 && !showResult;
+    : totalSec;
+  const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : totalSec) <= 3 && !showResult;
   const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
   const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
   const showSoloIntro = countdown !== null && isSolo;
