@@ -876,10 +876,9 @@ async def answer(req: AnswerReq):
             finish_duel(game, d["attacker_id"])
             touch(game)
             return {"ok": True, "correct": False}
-        if d.get("attacker_answer") is not None and d.get("defender_answer") is not None:
-            resolve_duel_if_ready(game)
-            touch(game)
-            return {"ok": True, "correct": False, "resolved": True}
+        # Deduct 3 seconds for wrong answer
+        current_stored = d.get(f"{turn}_stored_time", 0)
+        d[f"{turn}_stored_time"] = max(0.0, current_stored - 3.0)
         d["turn_start_ts"] = now_sec
         newq = get_random_question(d["category"], game.get("custom_questions"),
                                    force_image=(game.get("mode") == "flags_only"), game=game)

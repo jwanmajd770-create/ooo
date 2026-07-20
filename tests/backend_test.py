@@ -103,6 +103,28 @@ def test_pass_penalty_and_switch():
     assert d.get("attacker_stored_time") < server.FLOOR_DUEL_INIT_TIME
 
 
+def test_wrong_answer_penalizes_and_continues_duel():
+    code = "T5"
+    game = make_game(code)
+    p1, p2 = add_players(game)
+    game["grid"][1][0] = p2["id"]
+    req = server.AttackReq(code=code, player_token=p1["token"], row=1, col=0)
+    asyncio.run(server.attack(req))
+    d = game["duel"]
+    initial_stored = d.get("attacker_stored_time")
+    correct_idx = d["question"]["a"]
+    wrong_idx = (correct_idx + 1) % len(d["question"]["opts"])
+    time.sleep(0.05)
+    ans_req = server.AnswerReq(code=code, player_token=p1["token"], answer_idx=wrong_idx)
+    response = asyncio.run(server.answer(ans_req))
+
+    assert response["ok"] is True
+    assert response["correct"] is False
+    assert d.get("resolved") is False
+    assert d.get("attacker_stored_time") == pytest.approx(initial_stored - 3.0)
+    assert d.get("question") is not None
+
+
 def test_sudden_death_on_expiry():
     code = "T4"
     game = make_game(code)
@@ -127,4 +149,3 @@ def test_sudden_death_on_expiry():
     d = game.get("duel")
     assert d.get("resolved") is True
     assert d.get("winner_id") == p2["id"]
-*** End Patch
