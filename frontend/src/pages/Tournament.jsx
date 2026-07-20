@@ -29,6 +29,7 @@ export default function Tournament() {
   const [playerId, setPlayerId] = useState("");
   const [loading, setLoading] = useState(false);
   const [showBracket, setShowBracket] = useState(false);
+  const [step, setStep] = useState(1);
 
   useEffect(() => {
     const apiMode = mode === "football" ? "football" : mode === "flags_only" ? "flags_only" : "classic";
@@ -76,6 +77,7 @@ export default function Tournament() {
       setHostToken(data.host_token);
       setRoom({ code: data.code, host_name: hostName, mode, state: "lobby", players: [], bracket: [] });
       setShowBracket(false);
+      setStep(3);
       toast.success("تم إنشاء غرفة مبارزات مباشرة");
     } catch {
       toast.error("فشل إنشاء الغرفة");
@@ -98,6 +100,7 @@ export default function Tournament() {
       setPlayerId(data.player_id);
       await refreshState(code);
       setShowBracket(false);
+      setStep(3);
       toast.success("تم الانضمام إلى البطولة");
     } catch {
       toast.error("فشل الانضمام");
@@ -139,88 +142,107 @@ export default function Tournament() {
           <button onClick={() => navigate("/")} className="rounded-lg border border-white/10 px-4 py-2">العودة</button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-          <h2 className="mb-3 text-lg font-bold">الخطوة 1: اختر الوضع</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            {MODES.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setMode(item.id)}
-                className={`rounded-2xl border p-4 text-right ${mode === item.id ? "border-orange-400 bg-orange-500/20" : "border-white/10 bg-white/5"}`}
-              >
-                <div className="text-3xl">{item.icon}</div>
-                <div className="mt-2 font-bold">{item.title}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-          <h2 className="mb-3 text-lg font-bold">الخطوة 2: اختر الدور</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            {ROLES.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setRole(item.id)}
-                className={`rounded-2xl border p-4 text-right ${role === item.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5"}`}
-              >
-                <div className="text-3xl">{item.icon}</div>
-                <div className="mt-2 font-bold">{item.title}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {role === "host" ? (
+        {step === 1 && (
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm text-gray-400">اسم المقدم</label>
-                <input value={hostName} onChange={(e) => setHostName(e.target.value)} className="w-full rounded-lg bg-black/50 p-3" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm text-gray-400">الخيارات</label>
-                <button onClick={createRoom} disabled={loading} className="w-full rounded-lg bg-orange-500 px-4 py-3 font-bold disabled:opacity-60">
-                  إنشاء غرفة
+            <h2 className="mb-3 text-lg font-bold">الخطوة 1: اختر الوضع</h2>
+            <div className="grid gap-3 md:grid-cols-3">
+              {MODES.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setMode(item.id);
+                    setStep(2);
+                  }}
+                  className={`rounded-2xl border p-4 text-right ${mode === item.id ? "border-orange-400 bg-orange-500/20" : "border-white/10 bg-white/5"}`}
+                >
+                  <div className="text-3xl">{item.icon}</div>
+                  <div className="mt-2 font-bold">{item.title}</div>
                 </button>
-              </div>
+              ))}
             </div>
           </div>
-        ) : (
+        )}
+
+        {step === 2 && (
           <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm text-gray-400">رمز البطولة</label>
-                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} className="w-full rounded-lg bg-black/50 p-3" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm text-gray-400">اسمك</label>
-                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg bg-black/50 p-3" />
-              </div>
+            <h2 className="mb-3 text-lg font-bold">الخطوة 2: اختر الدور</h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              {ROLES.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setRole(item.id);
+                    setStep(3);
+                  }}
+                  className={`rounded-2xl border p-4 text-right ${role === item.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5"}`}
+                >
+                  <div className="text-3xl">{item.icon}</div>
+                  <div className="mt-2 font-bold">{item.title}</div>
+                </button>
+              ))}
             </div>
-
             <div className="mt-4">
-              <h3 className="mb-2 text-sm text-gray-400">اختر فئة من قائمة هذا الوضع</h3>
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-                {categories.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setCategory(item.id)}
-                    className={`rounded-lg border p-3 text-right ${category === item.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5"}`}
-                  >
-                    <div className="mb-1 text-2xl">{item.icon}</div>
-                    <div className="text-sm">{item.name}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <button onClick={joinRoom} disabled={loading || !code || !name || !category} className="rounded-lg bg-cyan-500 px-4 py-3 font-bold disabled:opacity-60">
-                انضم
+              <button onClick={() => setStep(1)} className="rounded-lg border border-white/10 px-4 py-2">
+                رجوع
               </button>
             </div>
           </div>
+        )}
+
+        {step === 3 && (
+          <>
+            {role === "host" ? (
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm text-gray-400">اسم المقدم</label>
+                    <input value={hostName} onChange={(e) => setHostName(e.target.value)} className="w-full rounded-lg bg-black/50 p-3" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm text-gray-400">الخيارات</label>
+                    <button onClick={createRoom} disabled={loading} className="w-full rounded-lg bg-orange-500 px-4 py-3 font-bold disabled:opacity-60">
+                      إنشاء غرفة
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-2 block text-sm text-gray-400">رمز البطولة</label>
+                    <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} className="w-full rounded-lg bg-black/50 p-3" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm text-gray-400">اسمك</label>
+                    <input value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-lg bg-black/50 p-3" />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <h3 className="mb-2 text-sm text-gray-400">اختر فئة من قائمة هذا الوضع</h3>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    {categories.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => setCategory(item.id)}
+                        className={`rounded-lg border p-3 text-right ${category === item.id ? "border-cyan-400 bg-cyan-500/20" : "border-white/10 bg-white/5"}`}
+                      >
+                        <div className="mb-1 text-2xl">{item.icon}</div>
+                        <div className="text-sm">{item.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <button onClick={joinRoom} disabled={loading || !code || !name || !category} className="rounded-lg bg-cyan-500 px-4 py-3 font-bold disabled:opacity-60">
+                    انضم
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {room && !shouldShowBracket && (

@@ -1,7 +1,8 @@
 import axios from "axios";
 
-export const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
+const rawBackendUrl = (process.env.REACT_APP_BACKEND_URL || "").trim();
+export const BACKEND_URL = rawBackendUrl;
+export const API = rawBackendUrl ? `${rawBackendUrl}/api` : "/api";
 
 export const api = {
   categories: (mode) => axios.get(`${API}/categories`, { params: mode ? { mode } : {} }).then((r) => r.data),
