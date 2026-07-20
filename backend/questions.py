@@ -7,6 +7,8 @@ IMAGE_CATEGORIES = [
     {"id": "anime_img", "name": "تحدي الصور - أنمي", "icon": "🎌", "color": "#FF6B9D"},
     {"id": "brands_img", "name": "تحدي الصور - براندات", "icon": "🏷️", "color": "#FFD700"},
     {"id": "clubs_img", "name": "تحدي الصور - أندية", "icon": "🏆", "color": "#00FF88"},
+    {"id": "apps_img", "name": "تحدي الصور - تطبيقات", "icon": "📱", "color": "#00C896"},
+    {"id": "landmarks_img", "name": "تحدي الصور - معالم", "icon": "🏛️", "color": "#FF8C00"},
 ]
 
 CATEGORIES = [
@@ -29,6 +31,8 @@ CATEGORIES = [
     {"id": "celebs", "name": "مشاهير عرب", "icon": "⭐", "color": "#FF007F"},
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
     {"id": "business", "name": "اقتصاد وأعمال", "icon": "💰", "color": "#FFFF00"},
+    {"id": "apps_img", "name": "تحدي الصور - تطبيقات", "icon": "📱", "color": "#00C896"},
+    {"id": "landmarks_img", "name": "تحدي الصور - معالم", "icon": "🏛️", "color": "#FF8C00"},
     {"id": "logic", "name": "ألغاز وذكاء", "icon": "🧩", "color": "#9D4CDD"},
 ]
 
