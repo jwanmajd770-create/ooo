@@ -876,7 +876,7 @@ async def answer(req: AnswerReq):
             finish_duel(game, d["attacker_id"])
             touch(game)
             return {"ok": True, "correct": False}
-        # Deduct 3 seconds for wrong answer
+        # Deduct 3 seconds for wrong answer; reaching zero still keeps the duel alive
         current_stored = d.get(f"{turn}_stored_time", 0)
         d[f"{turn}_stored_time"] = max(0.0, current_stored - 3.0)
         d["turn_start_ts"] = now_sec
