@@ -34,6 +34,7 @@ GAMES: Dict[str, dict] = {}
 
 GRID_SIZE = 6
 DUEL_TIMEOUT_MS = 45000
+FLOOR_DUEL_INIT_TIME = DUEL_TIMEOUT_MS / 1000.0
 FAST_DUEL_TIMEOUT_MS = 6000
 MAX_SPECTATORS = 100
 ROOM_TTL_MS = 6 * 60 * 60 * 1000        # any room dies after 6h
@@ -255,6 +256,20 @@ def finish_duel(game, loser_id):
     game["pending_action"] = {"type": "duel_review", "until": now_ms() + 3800}
 
 
+def duel_should_resolve(d, now=None):
+    if not d:
+        return False
+    if now is None:
+        now = now_ms()
+    solo = d.get("defender_id") is None
+    if solo:
+        elapsed = now - d.get("started_at", now)
+        return elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
+    attacker_out = d.get("attacker_stored_time", 0) <= 0
+    defender_out = d.get("defender_stored_time", 0) <= 0
+    return attacker_out and defender_out
+
+
 def check_duel_timeout(game):
     """يتحقق إن انتهى وقت المبارزة الكلي أو تم تلقي إجابتين."""
     d = game.get("duel")
@@ -264,7 +279,7 @@ def check_duel_timeout(game):
         return
     if not d.get("defender_id"):
         return
-    if now_ms() - d.get("started_at", now_ms()) >= d.get("timeout_ms", DUEL_TIMEOUT_MS):
+    if duel_should_resolve(d):
         resolve_duel_if_ready(game)
 
 
@@ -680,7 +695,7 @@ async def attack(req: AttackReq):
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = DUEL_TIMEOUT_MS
-    bank_sec = timeout / 1000.0  # رصيد كل لاعب بالثواني
+    bank_sec = FLOOR_DUEL_INIT_TIME  # رصيد كل لاعب بالثواني
     now = now_ms()
     game["duel"] = {
         "attacker_id": me["id"],
@@ -711,10 +726,7 @@ def resolve_duel_if_ready(game):
         return
     solo = d["defender_id"] is None
     now = now_ms()
-    elapsed = now - d["started_at"]
-    timed_out = elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
-    print(f"RESOLVE_CHECK: timed_out={timed_out}, elapsed={elapsed}, resolved={d.get('resolved')}")
-    print(f"RESOLVE_DETAIL: elapsed={elapsed}, timeout_ms={d.get('timeout_ms')}, timed_out={timed_out}, started_at={d.get('started_at')}, now={now_ms()}")
+    timed_out = duel_should_resolve(d, now)
     if not timed_out:
         return
 
@@ -832,7 +844,6 @@ async def answer(req: AnswerReq):
     correct = d["question"]["a"]
     is_correct = (req.answer_idx == correct)
     now_sec = now_ms() / 1000.0
-    print(f"ANSWER: turn={d.get('turn')}, correct={correct}, is_solo={is_solo}")
 
     if is_correct:
         d[f"{turn}_stored_time"] = d.get(f"{turn}_stored_time", 0.0)
@@ -859,12 +870,10 @@ async def answer(req: AnswerReq):
         current_stored = d.get(f"{turn}_stored_time", 0)
         d[f"{turn}_stored_time"] = max(0.0, current_stored - 3.0)
         d["turn_start_ts"] = now_sec
-        print(f"WRONG: stored_time={d.get(f'{turn}_stored_time')}, resolved={d.get('resolved')}")
         newq = get_random_question(d["category"], game.get("custom_questions"),
                                    force_image=(game.get("mode") == "flags_only"), game=game)
         if newq:
             d["question"] = newq
-        print(f"ANSWER_END: resolved={d.get('resolved')}, turn={d.get('turn')}")
         touch(game)
         return {"ok": True, "correct": False}
 

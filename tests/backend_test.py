@@ -125,6 +125,41 @@ def test_wrong_answer_penalizes_and_continues_duel():
     assert d.get("question") is not None
 
 
+def test_two_player_duel_only_resolves_when_both_players_are_out_of_time():
+    code = "T6"
+    game = make_game(code)
+    p1, p2 = add_players(game)
+    game["duel"] = {
+        "attacker_id": p1["id"],
+        "defender_id": p2["id"],
+        "target": [0, 0],
+        "category": "science",
+        "question": {"q": "x", "opts": ["a", "b", "c", "d"], "a": 0},
+        "started_at": server.now_ms() - 10000,
+        "timeout_ms": 1000,
+        "attacker_stored_time": 0.5,
+        "defender_stored_time": 1.0,
+        "turn": "attacker",
+        "turn_start_ts": server.now_ms() / 1000.0,
+        "attacker_correct_count": 0,
+        "defender_correct_count": 0,
+        "resolved": False,
+        "winner_id": None,
+    }
+    game["players"] = [p1, p2]
+
+    server.resolve_duel_if_ready(game)
+    assert game["duel"]["resolved"] is False
+
+    game["duel"]["attacker_stored_time"] = 0.0
+    server.resolve_duel_if_ready(game)
+    assert game["duel"]["resolved"] is False
+
+    game["duel"]["defender_stored_time"] = 0.0
+    server.resolve_duel_if_ready(game)
+    assert game["duel"]["resolved"] is True
+
+
 def test_sudden_death_on_expiry():
     code = "T4"
     game = make_game(code)
