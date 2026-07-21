@@ -732,98 +732,17 @@ def resolve_duel_if_ready(game):
     if not timed_out:
         return
 
-    correct = d["question"]["a"]
-    a_correct = False
-    d_correct = False
-
     if solo:
-        winner_id = d["attacker_id"] if a_correct else None
+        loser_id = d["attacker_id"]
     else:
         attacker_out = _duel_bank(d, "attacker") <= 0
-        winner_id = d["defender_id"] if attacker_out else d["attacker_id"]
+        defender_out = _duel_bank(d, "defender") <= 0
+        loser_id = d["attacker_id"] if attacker_out else d["defender_id"] if defender_out else None
 
-    d["resolved"] = True
-    d["winner_id"] = winner_id
-    tr, tc = d["target"]
-
-    if winner_id == d["attacker_id"]:
-        game["grid"][tr][tc] = d["attacker_id"]
-        attacker = next(p for p in game["players"] if p["id"] == d["attacker_id"])
-        attacker["wins"] += 1
-        if attacker["wins"] % 3 == 0:
-            keys = list(attacker["powerups"].keys())
-            random.shuffle(keys)
-            for k in keys:
-                if attacker["powerups"][k] < 2:
-                    attacker["powerups"][k] += 1
-                    break
-        if not solo:
-            eliminate_check(game, d["defender_id"])
-
-    game["last_action"] = {
-        "type": "duel_resolved",
-        "winner_id": winner_id,
-        "attacker_correct": a_correct,
-        "defender_correct": d_correct if not solo else None,
-        "correct_idx": correct,
-        "target": d["target"],
-    }
-    game["state"] = "active"
-
-    alive = [p for p in game["players"] if not p["eliminated"]]
-    if len(alive) <= 3 and not game.get("sudden_death"):
-        game["sudden_death"] = True
-    if len(alive) <= 1:
-        game["state"] = "finished"
-        game["winner"] = alive[0]["id"] if alive else None
-        # persist stats
-        if not game.get("_stats_saved"):
-            game["_stats_saved"] = True
-            import asyncio
-            try:
-                asyncio.create_task(save_game_result(db, game))
-            except Exception:
-                pass
-    elif len(alive) == 2 and not game.get("final_duel_active"):
-        # المبارزة النهائية: لاعبان فقط → 3 جولات حاسمة
-        game["final_duel_active"] = True
-        game["final_duel_round"] = 0  # 0=فئة A، 1=فئة B، 2=عشوائية
-        game["final_duel_scores"] = {alive[0]["id"]: 0, alive[1]["id"]: 0}
-        game["final_duel_players"] = [alive[0]["id"], alive[1]["id"]]
-
-    # تحديث نقاط المبارزة النهائية
-    if game.get("final_duel_active") and winner_id:
-        fd_scores = game.get("final_duel_scores", {})
-        if winner_id in fd_scores:
-            fd_scores[winner_id] = fd_scores.get(winner_id, 0) + 1
-        fd_round = game.get("final_duel_round", 0)
-        game["final_duel_round"] = fd_round + 1
-        # تحقق: هل فاز أحد بجولتين أو انتهت الجولات الثلاث
-        fd_players = game.get("final_duel_players", [])
-        if fd_players:
-            s0 = fd_scores.get(fd_players[0], 0)
-            s1 = fd_scores.get(fd_players[1], 0)
-            total_rounds = fd_round + 1
-            fd_winner = None
-            if s0 >= 2:
-                fd_winner = fd_players[0]
-            elif s1 >= 2:
-                fd_winner = fd_players[1]
-            elif total_rounds >= 3:
-                fd_winner = fd_players[0] if s0 > s1 else (fd_players[1] if s1 > s0 else None)
-            if fd_winner:
-                game["state"] = "finished"
-                game["winner"] = fd_winner
-                game["final_duel_active"] = False
-                if not game.get("_stats_saved"):
-                    game["_stats_saved"] = True
-                    import asyncio
-                    try:
-                        asyncio.create_task(save_game_result(db, game))
-                    except Exception:
-                        pass
-
-    game["pending_action"] = {"type": "duel_review", "until": now + 3800}
+    if loser_id is not None:
+        finish_duel(game, loser_id)
+    else:
+        game["pending_action"] = {"type": "duel_review", "until": now + 3800}
 
 
 @api_router.post("/rooms/answer")
@@ -860,25 +779,25 @@ async def answer(req: AnswerReq):
     # نظام الرصيد الفردي: يُخصم من رصيد صاحب الدور وقت تفكيره الحقيقي المنقضي
     # (+عقوبة 3 ثوان إن أخطأ)، وأول لاعب ينتهي رصيده يخسر المبارزة فوراً بلا مؤقّت عام.
     d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + (1 if is_correct else 0)
-    if is_correct:
-        remaining = max(0.0, _duel_current_remaining(d))
-    else:
-        remaining = max(0.0, _duel_current_remaining(d) - 3.0)
+    penalty = 0.0 if is_correct else 3.0
+    remaining = max(0.0, _duel_current_remaining(d) - penalty)
     d[f"{turn}_stored_time"] = remaining
     if remaining <= 0:
         finish_duel(game, turn_id)
         touch(game)
         return {"ok": True, "correct": is_correct, "timed_out": True}
 
-    other = "defender" if turn == "attacker" else "attacker"
-    d["turn"] = other
+    if is_correct:
+        other = "defender" if turn == "attacker" else "attacker"
+        d["turn"] = other
+
     d["turn_start_ts"] = now_sec
     newq = get_random_question(d["category"], game.get("custom_questions"),
                                force_image=(game.get("mode") == "flags_only"), game=game)
     if newq:
         d["question"] = newq
     touch(game)
-    return {"ok": True, "correct": is_correct, "switched": True}
+    return {"ok": True, "correct": is_correct, "switched": is_correct}
 
 
 @api_router.post("/rooms/duel_pass")

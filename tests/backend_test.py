@@ -57,8 +57,9 @@ def test_initial_clock_and_duel_creation():
     code = "T1"
     game = make_game(code)
     p1, p2 = add_players(game)
-    # defender owns target
+    # defender owns target; attacker owns an adjacent cell
     game["grid"][1][1] = p2["id"]
+    game["grid"][0][1] = p1["id"]
 
     req = server.AttackReq(code=code, player_token=p1["token"], row=1, col=1)
     asyncio.run(server.attack(req))
@@ -75,6 +76,7 @@ def test_correct_answer_saves_clock_and_switches_turn():
     game = make_game(code)
     p1, p2 = add_players(game)
     game["grid"][0][0] = p2["id"]
+    game["grid"][0][1] = p1["id"]
     req = server.AttackReq(code=code, player_token=p1["token"], row=0, col=0)
     asyncio.run(server.attack(req))
     d = game["duel"]
@@ -93,6 +95,7 @@ def test_pass_penalty_and_switch():
     game = make_game(code)
     p1, p2 = add_players(game)
     game["grid"][2][2] = p2["id"]
+    game["grid"][2][1] = p1["id"]
     req = server.AttackReq(code=code, player_token=p1["token"], row=2, col=2)
     asyncio.run(server.attack(req))
     d = game["duel"]
@@ -108,6 +111,7 @@ def test_wrong_answer_penalizes_and_continues_duel():
     game = make_game(code)
     p1, p2 = add_players(game)
     game["grid"][1][0] = p2["id"]
+    game["grid"][0][0] = p1["id"]
     req = server.AttackReq(code=code, player_token=p1["token"], row=1, col=0)
     asyncio.run(server.attack(req))
     d = game["duel"]
@@ -121,11 +125,50 @@ def test_wrong_answer_penalizes_and_continues_duel():
     assert response["ok"] is True
     assert response["correct"] is False
     assert d.get("resolved") is False
-    assert d.get("attacker_stored_time") == pytest.approx(initial_stored - 3.0)
+    # penalty is elapsed thinking time + 3s, not a flat -3s
+    assert d.get("attacker_stored_time") == pytest.approx(initial_stored - 3.0, abs=0.2)
+    assert d.get("attacker_stored_time") < initial_stored - 3.0
     assert d.get("question") is not None
+    # a wrong answer keeps the same turn and only consumes time
+    assert d.get("turn") == "attacker"
 
 
-def test_two_player_duel_only_resolves_when_both_players_are_out_of_time():
+def test_running_out_of_time_on_a_wrong_answer_ends_duel_immediately():
+    code = "T8"
+    game = make_game(code)
+    p1, p2 = add_players(game)
+    game["duel"] = {
+        "attacker_id": p1["id"],
+        "defender_id": p2["id"],
+        "target": [4, 4],
+        "category": "science",
+        "question": {"q": "x", "opts": ["a", "b", "c", "d"], "a": 0},
+        "turn": "attacker",
+        "turn_start_ts": time.time() - 1.0,
+        "attacker_stored_time": 2.0,
+        "defender_stored_time": server.FLOOR_DUEL_INIT_TIME,
+        "attacker_correct_count": 0,
+        "defender_correct_count": 0,
+        "resolved": False,
+        "winner_id": None,
+    }
+    game["grid"][4][4] = p2["id"]
+
+    wrong_idx = 1  # != d["question"]["a"]
+    ans_req = server.AnswerReq(code=code, player_token=p1["token"], answer_idx=wrong_idx)
+    response = asyncio.run(server.answer(ans_req))
+
+    assert response["ok"] is True
+    assert response["correct"] is False
+    d = game["duel"]
+    # ~1s elapsed + 3s penalty exceeds the attacker's 2s bank -> duel ends now,
+    # not because "both answered wrong" and not via any global/started_at timer.
+    assert d.get("resolved") is True
+    assert d.get("winner_id") == p2["id"]
+    assert d.get("turn") == "attacker"  # never switched; duel ended before the switch
+
+
+def test_two_player_duel_resolves_as_soon_as_either_player_is_out_of_time():
     code = "T6"
     game = make_game(code)
     p1, p2 = add_players(game)
@@ -151,13 +194,12 @@ def test_two_player_duel_only_resolves_when_both_players_are_out_of_time():
     server.resolve_duel_if_ready(game)
     assert game["duel"]["resolved"] is False
 
+    # attacker's own bank hits zero -> duel ends immediately, defender wins.
+    # defender's bank is untouched (still has time) and must not matter.
     game["duel"]["attacker_stored_time"] = 0.0
     server.resolve_duel_if_ready(game)
-    assert game["duel"]["resolved"] is False
-
-    game["duel"]["defender_stored_time"] = 0.0
-    server.resolve_duel_if_ready(game)
     assert game["duel"]["resolved"] is True
+    assert game["duel"]["winner_id"] == p2["id"]
 
 
 def test_two_player_start_positions_have_a_gap():
@@ -187,16 +229,13 @@ def test_sudden_death_on_expiry():
         "question": {"q": "x", "opts": ["a", "b", "c", "d"], "a": 0},
         "turn": "attacker",
         "turn_start_ts": now_ts - 4.0,
-        "attacker_stored_time": 0.0,
+        "attacker_stored_time": 0.5,
         "defender_stored_time": server.FLOOR_DUEL_INIT_TIME,
+        "started_at": server.now_ms() - 10000,
         "resolved": False,
     }
-    asyncio.run(server.tick(code))
-    d = game.get("duel")
-    assert d.get("resolved") is False
-
-    game["duel"]["defender_stored_time"] = 0.0
-    game["duel"]["started_at"] = server.now_ms() - 10000
+    # attacker's own personal bank ran out mid-turn -> resolves immediately,
+    # even though the defender's bank still has plenty of time left.
     asyncio.run(server.tick(code))
     d = game.get("duel")
     assert d.get("resolved") is True
