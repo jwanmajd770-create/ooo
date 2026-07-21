@@ -98,44 +98,57 @@ def can_attack(game, attacker_id, target_r, target_c):
     return False
 
 
-def _pick_avoiding_repeats(pool, asked_set, key_fn):
-    """يختار عنصراً لم يُطرح مؤخراً؛ إذا استُنفدت كلها يعيد التدوير."""
-    if not pool:
+def _get_question_pool(category_id, custom_questions=None, force_image=False):
+    imgs = IMAGE_QUESTIONS.get(category_id, [])
+    customs = (custom_questions or {}).get(category_id, [])
+    if force_image and imgs:
+        return imgs
+    if customs:
+        return customs
+    qs = QUESTIONS.get(category_id, [])
+    if qs:
+        return qs
+    if imgs:
+        return imgs
+    return []
+
+
+def _ensure_question_queue(game, category_id, custom_questions=None, force_image=False):
+    if game is None:
         return None
-    fresh = [x for x in pool if key_fn(x) not in asked_set]
-    if not fresh:
-        # استُنفدت كل الأسئلة: صفّر الذاكرة لهذه الفئة وأعد التدوير
-        for x in pool:
-            asked_set.discard(key_fn(x))
-        fresh = pool
-    chosen = random.choice(fresh)
-    asked_set.add(key_fn(chosen))
-    return chosen
+    queues = game.setdefault("_question_queues", {})
+    queue = queues.get(category_id)
+    if queue is None or not queue:
+        pool = _get_question_pool(category_id, custom_questions=custom_questions, force_image=force_image)
+        if not pool:
+            queues[category_id] = []
+            return []
+        shuffled = list(pool)
+        random.shuffle(shuffled)
+        queues[category_id] = shuffled
+        return queues[category_id]
+    return queue
 
 
 def get_random_question(category_id, custom_questions=None, force_image=False, game=None):
-    imgs = IMAGE_QUESTIONS.get(category_id, [])
-    customs = (custom_questions or {}).get(category_id, [])
-    # ذاكرة الأسئلة المطروحة لكل غرفة (تمنع التكرار السريع)
-    asked = None
-    if game is not None:
-        asked = game.setdefault("_asked_questions", {}).setdefault(category_id, set())
-
-    def _q_key(q):
-        return q.get("q", "") if isinstance(q, dict) else str(q)
-
-    if force_image and imgs:
-        return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
-    if imgs and random.random() < 0.25:
-        return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
-    if customs and random.random() < 0.20:
-        return _pick_avoiding_repeats(customs, asked, _q_key) if asked is not None else random.choice(customs)
-    qs = QUESTIONS.get(category_id, [])
-    if not qs:
-        if imgs:
-            return _pick_avoiding_repeats(imgs, asked, _q_key) if asked is not None else random.choice(imgs)
+    pool = _get_question_pool(category_id, custom_questions=custom_questions, force_image=force_image)
+    if not pool:
         return None
-    return _pick_avoiding_repeats(qs, asked, _q_key) if asked is not None else random.choice(qs)
+
+    queue = None
+    if game is not None:
+        queue = _ensure_question_queue(game, category_id, custom_questions=custom_questions, force_image=force_image)
+        if queue is None:
+            queue = []
+        if not queue:
+            shuffled = list(pool)
+            random.shuffle(shuffled)
+            game.setdefault("_question_queues", {})[category_id] = shuffled
+            queue = game["_question_queues"][category_id]
+        if queue:
+            return game["_question_queues"][category_id].pop(0)
+
+    return random.choice(pool)
 
 
 def next_turn(game):
@@ -200,6 +213,10 @@ def finish_duel(game, loser_id):
     tr, tc = d["target"]
 
     if winner_id == att:
+        winner = next(p for p in game["players"] if p["id"] == att)
+        loser = next((p for p in game["players"] if p["id"] == loser_id), None) if loser_id is not None else None
+        if loser is not None:
+            winner["current_category"] = loser.get("current_category", loser.get("category_id"))
         # المهاجم يفوز: يأخذ الخانة الهدف
         game["grid"][tr][tc] = att
         attacker = next(p for p in game["players"] if p["id"] == att)
@@ -227,6 +244,9 @@ def finish_duel(game, loser_id):
                 if game["grid"][r][c] == att:
                     game["grid"][r][c] = dfn
         defender = next(p for p in game["players"] if p["id"] == dfn)
+        loser = next((p for p in game["players"] if p["id"] == loser_id), None) if loser_id is not None else None
+        if loser is not None:
+            defender["current_category"] = loser.get("current_category", loser.get("category_id"))
         defender["wins"] += 1
         eliminate_check(game, att)
 
@@ -527,6 +547,7 @@ async def join_room(req: JoinReq):
         "token": token,
         "name": req.name,
         "category_id": req.category_id,
+        "current_category": req.category_id,
         "category_name": cat["name"],
         "icon": cat["icon"],
         "color": color,
@@ -664,16 +685,16 @@ async def attack(req: AttackReq):
     if target_owner is None:
         defender_id = None
         if game.get("mode") == "flags_only":
-            category = me["category_id"] if me["category_id"] in flags_allowed_ids else "capitals"
+            category = me.get("current_category", me["category_id"]) if me.get("current_category", me["category_id"]) in flags_allowed_ids else "capitals"
         else:
-            category = me["category_id"]
+            category = me.get("current_category", me["category_id"])
     else:
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         if game.get("mode") == "flags_only":
-            category = defender["category_id"] if defender["category_id"] in flags_allowed_ids else "capitals"
+            category = defender.get("current_category", defender["category_id"]) if defender.get("current_category", defender["category_id"]) in flags_allowed_ids else "capitals"
         else:
-            category = defender["category_id"]
+            category = defender.get("current_category", defender["category_id"])
 
     # المبارزة النهائية: تحديد الفئة حسب الجولة
     if game.get("final_duel_active") and game.get("mode") != "flags_only":

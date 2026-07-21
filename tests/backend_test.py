@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 import pytest
 
@@ -240,3 +241,41 @@ def test_sudden_death_on_expiry():
     d = game.get("duel")
     assert d.get("resolved") is True
     assert d.get("winner_id") == p2["id"]
+
+
+def test_finish_duel_transfers_winner_category():
+    game = make_game("T9")
+    p1, p2 = add_players(game)
+    p1["current_category"] = "science"
+    p2["current_category"] = "history"
+    game["duel"] = {
+        "attacker_id": p1["id"],
+        "defender_id": p2["id"],
+        "target": [0, 0],
+        "category": "science",
+        "question": {"q": "x", "opts": ["a", "b", "c", "d"], "a": 0},
+        "resolved": False,
+    }
+
+    server.finish_duel(game, p1["id"])
+
+    assert p2["current_category"] == "science"
+
+
+def test_get_random_question_uses_queue_without_repeats_until_exhausted():
+    random.seed(0)
+    game = make_game("T10")
+    custom_questions = {
+        "custom_test": [
+            {"q": "q1", "opts": ["a", "b", "c", "d"], "a": 0},
+            {"q": "q2", "opts": ["a", "b", "c", "d"], "a": 0},
+        ]
+    }
+
+    q1 = server.get_random_question("custom_test", custom_questions=custom_questions, game=game, force_image=False)
+    q2 = server.get_random_question("custom_test", custom_questions=custom_questions, game=game, force_image=False)
+    q3 = server.get_random_question("custom_test", custom_questions=custom_questions, game=game, force_image=False)
+
+    assert q1["q"] == "q1"
+    assert q2["q"] == "q2"
+    assert q3["q"] == "q1"
