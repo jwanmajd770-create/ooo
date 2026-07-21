@@ -265,13 +265,11 @@ def duel_should_resolve(d, now=None):
     if solo:
         elapsed = now - d.get("started_at", now)
         return elapsed >= d.get("timeout_ms", DUEL_TIMEOUT_MS)
-    attacker_out = d.get("attacker_stored_time", 0) <= 0
-    defender_out = d.get("defender_stored_time", 0) <= 0
-    return attacker_out and defender_out
+    return _duel_bank(d, "attacker") <= 0 or _duel_bank(d, "defender") <= 0
 
 
 def check_duel_timeout(game):
-    """يتحقق إن انتهى وقت المبارزة الكلي أو تم تلقي إجابتين."""
+    """يتحقق إن انتهى الوقت الكلي (خانة فارغة) أو نفد رصيد أحد اللاعبين (مبارزة بين لاعبين)."""
     d = game.get("duel")
     if not d or d.get("resolved"):
         return
@@ -382,6 +380,11 @@ class AnswerReq(BaseModel):
     code: str
     player_token: str
     answer_idx: int
+
+
+class DuelPassReq(BaseModel):
+    code: str
+    player_token: str
 
 
 class PowerUpReq(BaseModel):
@@ -736,7 +739,8 @@ def resolve_duel_if_ready(game):
     if solo:
         winner_id = d["attacker_id"] if a_correct else None
     else:
-        winner_id = d["defender_id"]
+        attacker_out = _duel_bank(d, "attacker") <= 0
+        winner_id = d["defender_id"] if attacker_out else d["attacker_id"]
 
     d["resolved"] = True
     d["winner_id"] = winner_id
@@ -844,37 +848,79 @@ async def answer(req: AnswerReq):
     is_correct = (req.answer_idx == correct)
     now_sec = now_ms() / 1000.0
 
-    if is_correct:
-        d[f"{turn}_stored_time"] = d.get(f"{turn}_stored_time", 0.0)
-        d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + 1
-        if is_solo:
+    if is_solo:
+        if is_correct:
             finish_duel(game, None)
             touch(game)
             return {"ok": True, "correct": True}
-        other = "defender" if turn == "attacker" else "attacker"
-        d["turn"] = other
-        d["turn_start_ts"] = now_sec
-        newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"), game=game)
-        if newq:
-            d["question"] = newq
-        touch(game)
-        return {"ok": True, "correct": True, "switched": True}
-    else:
-        if is_solo:
-            finish_duel(game, d["attacker_id"])
-            touch(game)
-            return {"ok": True, "correct": False}
-        # Deduct 3 seconds for wrong answer; reaching zero still keeps the duel alive
-        current_stored = d.get(f"{turn}_stored_time", 0)
-        d[f"{turn}_stored_time"] = max(0.0, current_stored - 3.0)
-        d["turn_start_ts"] = now_sec
-        newq = get_random_question(d["category"], game.get("custom_questions"),
-                                   force_image=(game.get("mode") == "flags_only"), game=game)
-        if newq:
-            d["question"] = newq
+        finish_duel(game, d["attacker_id"])
         touch(game)
         return {"ok": True, "correct": False}
+
+    # نظام الرصيد الفردي: يُخصم من رصيد صاحب الدور وقت تفكيره الحقيقي المنقضي
+    # (+عقوبة 3 ثوان إن أخطأ)، وأول لاعب ينتهي رصيده يخسر المبارزة فوراً بلا مؤقّت عام.
+    d[f"{turn}_correct_count"] = d.get(f"{turn}_correct_count", 0) + (1 if is_correct else 0)
+    if is_correct:
+        remaining = max(0.0, _duel_current_remaining(d))
+    else:
+        remaining = max(0.0, _duel_current_remaining(d) - 3.0)
+    d[f"{turn}_stored_time"] = remaining
+    if remaining <= 0:
+        finish_duel(game, turn_id)
+        touch(game)
+        return {"ok": True, "correct": is_correct, "timed_out": True}
+
+    other = "defender" if turn == "attacker" else "attacker"
+    d["turn"] = other
+    d["turn_start_ts"] = now_sec
+    newq = get_random_question(d["category"], game.get("custom_questions"),
+                               force_image=(game.get("mode") == "flags_only"), game=game)
+    if newq:
+        d["question"] = newq
+    touch(game)
+    return {"ok": True, "correct": is_correct, "switched": True}
+
+
+@api_router.post("/rooms/duel_pass")
+async def duel_pass(req: DuelPassReq):
+    """تجاوز الدور طوعاً: نفس عقوبة الإجابة الخاطئة (خصم الوقت المنقضي + 3 ثوان) بلا اختيار إجابة."""
+    game = GAMES.get(req.code)
+    if not game:
+        raise HTTPException(404)
+    d = game.get("duel")
+    if not d or d.get("resolved"):
+        raise HTTPException(400, "لا توجد مبارزة نشطة")
+    me = next((p for p in game["players"] if p["token"] == req.player_token), None)
+    if not me:
+        raise HTTPException(403)
+
+    turn = d.get("turn")
+    turn_id = d["attacker_id"] if turn == "attacker" else d.get("defender_id")
+    if me["id"] != turn_id:
+        raise HTTPException(400, "ليس دورك في المبارزة")
+
+    if not d.get("defender_id"):
+        finish_duel(game, d["attacker_id"])
+        touch(game)
+        return {"ok": True}
+
+    now_sec = now_ms() / 1000.0
+    remaining = max(0.0, _duel_current_remaining(d) - 3.0)
+    d[f"{turn}_stored_time"] = remaining
+    if remaining <= 0:
+        finish_duel(game, turn_id)
+        touch(game)
+        return {"ok": True}
+
+    other = "defender" if turn == "attacker" else "attacker"
+    d["turn"] = other
+    d["turn_start_ts"] = now_sec
+    newq = get_random_question(d["category"], game.get("custom_questions"),
+                               force_image=(game.get("mode") == "flags_only"), game=game)
+    if newq:
+        d["question"] = newq
+    touch(game)
+    return {"ok": True}
 
 
 @api_router.post("/rooms/powerup")
@@ -896,22 +942,22 @@ async def use_powerup(req: PowerUpReq):
     if pu == "skip":
         if not in_duel():
             raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
-        # prevent abuse: can't skip after the opponent already answered
-        opp_answer = d.get("defender_answer") if me["id"] == d["attacker_id"] else d.get("attacker_answer")
-        if opp_answer is not None:
-            raise HTTPException(400, "لا يمكن التخطي بعد إجابة الخصم")
+        skip_turn_id = d["attacker_id"] if d.get("turn") == "attacker" else d.get("defender_id")
+        if me["id"] != skip_turn_id:
+            raise HTTPException(400, "يمكن التخطي فقط في دورك")
         d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
-        d["attacker_answer"] = None
-        d["defender_answer"] = None
-        d["attacker_time"] = None
-        d["defender_time"] = None
         d["started_at"] = now_ms()
+        d["turn_start_ts"] = now_ms() / 1000.0
         d["eye_hints"] = {}  # new question -> old hints invalid
         me["powerups"][pu] -= 1
     elif pu == "time":
         if not in_duel():
             raise HTTPException(400, "القدرة متاحة فقط لأطراف المبارزة")
-        d["started_at"] += 5000
+        if d.get("defender_id"):
+            role = "attacker" if me["id"] == d["attacker_id"] else "defender"
+            d[f"{role}_stored_time"] = d.get(f"{role}_stored_time", 0.0) + 5.0
+        else:
+            d["started_at"] += 5000
         me["powerups"][pu] -= 1
     elif pu == "eye":
         # give a hint - remove one wrong option (visible only to this player)
