@@ -128,9 +128,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     recognition.onend = () => {
       setVoiceListening(false);
       if (voiceActiveRef.current && !duelRef.current?.resolved) {
-        try {
-          recognitionRef.current?.start();
-        } catch (_) {}
+        setVoiceFeedback("لم أفهم، حاول مرة أخرى");
       }
     };
     recognition.onerror = () => {
@@ -140,8 +138,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     };
     recognition.onresult = (event) => {
       const results = Array.from(event.results || []);
-      const transcript = results.map((result) => result[0]?.transcript || "").join(" ").trim();
       const latest = results[results.length - 1];
+      const transcript = results.map((result) => result[0]?.transcript || "").join(" ").trim();
 
       if (!latest?.isFinal) {
         setVoiceInterim(transcript);
@@ -150,35 +148,29 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       }
 
       setVoiceInterim("");
-
-      const normalizeArabic = (value) =>
-        (value || "")
-          .toString()
-          .normalize("NFKD")
-          .replace(/[\u064B-\u065F\u0670]/g, "")
-          .replace(/\s+/g, "")
-          .replace(/[^\p{L}\p{N}]/gu, "");
-
-      const answerText = answerRef.current;
+      const correctAnswer = duelRef.current?.question?.opts?.[duelRef.current?.question?.a] || answerRef.current || "";
       const normalizedTranscript = normalizeArabic(transcript);
-      const normalizedAnswer = normalizeArabic(answerText);
+      const normalizedAnswer = normalizeArabic(correctAnswer);
       const similarity = normalizedAnswer && normalizedTranscript
         ? (1 - levenshtein(normalizedTranscript, normalizedAnswer) / Math.max(normalizedTranscript.length, normalizedAnswer.length))
         : 0;
       const score = Math.max(0, Math.round(similarity * 100));
 
+      console.log("voice debug", { transcript, correctAnswer, score, normalizedTranscript, normalizedAnswer });
+
+      try {
+        recognition.stop();
+      } catch (_) {}
+
+      setVoiceListening(false);
+      setVoiceActive(false);
+      voiceActiveRef.current = false;
+
       if (score >= 80) {
         setVoiceFeedback("✅");
-        setVoiceActive(false);
-        voiceActiveRef.current = false;
-        setVoiceListening(false);
-        try {
-          recognition.stop();
-        } catch (_) {}
         onAnswerRef.current?.(duelRef.current?.question?.a);
       } else {
-        setVoiceFeedback("لم أفهم، حاول مرة أخرى");
-        setVoiceListening(false);
+        setVoiceFeedback("خطأ - حاول مرة أخرى");
       }
     };
 
@@ -207,6 +199,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       setVoiceFeedback("لم أفهم، حاول مرة أخرى");
     }
   };
+
+  const normalizeArabic = (value) =>
+    (value || "")
+      .toString()
+      .normalize("NFKD")
+      .replace(/[\u064B-\u065F\u0670]/g, "")
+      .replace(/\s+/g, "")
+      .replace(/[^\p{L}\p{N}]/gu, "");
 
   const levenshtein = (a, b) => {
     const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
