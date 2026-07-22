@@ -27,6 +27,7 @@ export default function PlayerRoom() {
     [state?.duel?.attacker_id, state?.duel?.defender_id]
   );
   const isCurrentDuelPlayer = isDuelActive && duelPlayers.includes(me?.id);
+  const voiceMode = Boolean(state?.duel && state?.duel?.category === "flags_img" && isCurrentDuelPlayer);
   const [isTalking, setIsTalking] = useState(false);
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
@@ -255,6 +256,7 @@ export default function PlayerRoom() {
           myPowerups={me?.powerups}
           eyeHint={eyeHint}
           duelTimeoutMs={state.duel_timeout_ms}
+          voiceMode={voiceMode}
         />
 
         {state.state === "finished" && (

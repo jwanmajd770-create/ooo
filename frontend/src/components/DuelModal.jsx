@@ -3,7 +3,7 @@ import { sfx } from "../lib/sfx";
 import { api } from "../lib/api";
 import { toast } from "sonner";
 
-export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000, onPass }) {
+export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000, onPass, voiceMode = false }) {
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
@@ -12,6 +12,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const [busy, setBusy] = useState(false);
   const [wrongIdx, setWrongIdx] = useState(null);
   const [, setTick] = useState(0);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState(null);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const recognitionRef = useRef(null);
 
   // إعادة الرسم كل ربع ثانية ليتحرك العدّاد
   useEffect(() => {
@@ -85,15 +89,101 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     return () => clearInterval(iv);
   }, [duel, duelTimeoutMs, meId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "ar-SA";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setVoiceListening(true);
+    recognition.onend = () => setVoiceListening(false);
+    recognition.onerror = () => {
+      setVoiceFeedback("حاول مرة أخرى");
+      setVoiceListening(false);
+    };
+    recognition.onresult = async (event) => {
+      const transcript = Array.from(event.results || [])
+        .map((result) => result[0]?.transcript || "")
+        .join(" ")
+        .trim();
+      if (!transcript) {
+        setVoiceFeedback("حاول مرة أخرى");
+        return;
+      }
+
+      const normalizeArabic = (value) =>
+        (value || "")
+          .toString()
+          .normalize("NFKD")
+          .replace(/[\u064B-\u065F\u0670]/g, "")
+          .replace(/\s+/g, "")
+          .replace(/[^\p{L}\p{N}]/gu, "");
+
+      const answerText = duel?.question?.opts?.[duel?.question?.a] || "";
+      const normalizedTranscript = normalizeArabic(transcript);
+      const normalizedAnswer = normalizeArabic(answerText);
+      const similarity = normalizedAnswer && normalizedTranscript
+        ? (1 - levenshtein(normalizedTranscript, normalizedAnswer) / Math.max(normalizedTranscript.length, normalizedAnswer.length))
+        : 0;
+      const score = Math.max(0, Math.round(similarity * 100));
+
+      if (score >= 80) {
+        setVoiceFeedback("✅");
+        setVoiceActive(false);
+        await onAnswer(duel.question.a);
+      } else {
+        setVoiceFeedback("حاول مرة أخرى");
+      }
+    };
+
+    recognitionRef.current = recognition;
+    return () => {
+      recognition.stop();
+      recognitionRef.current = null;
+    };
+  }, [duel?.question?.a, duel?.question?.opts, onAnswer]);
+
+  const startVoiceRecognition = async () => {
+    if (!recognitionRef.current) {
+      setVoiceFeedback("المتصفح لا يدعم التعرف على الصوت");
+      return;
+    }
+    setVoiceFeedback(null);
+    setVoiceActive(true);
+    recognitionRef.current.start();
+  };
+
+  const levenshtein = (a, b) => {
+    const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
+    for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
+    for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
+    for (let i = 1; i <= a.length; i += 1) {
+      for (let j = 1; j <= b.length; j += 1) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j - 1] + cost,
+        );
+      }
+    }
+    return matrix[a.length][b.length];
+  };
+
   if (!duel) return null;
   const attacker = players.find((p) => p.id === duel.attacker_id);
   const defender = duel.defender_id ? players.find((p) => p.id === duel.defender_id) : null;
   const amInvolved = meId && (meId === duel.attacker_id || meId === duel.defender_id);
-  const alreadyAnswered = duel.resolved || (meId === duel.attacker_id ? duel.attacker_answered : meId === duel.defender_id ? duel.defender_answered : false);
   const showResult = duel.resolved;
   const correct = showResult ? duel.question.a : null;
   const nowSec = Date.now() / 1000;
   const isTurnBased = duel.turn === "attacker" || duel.turn === "defender";
+  const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
+  const alreadyAnswered = showResult || (isTurnBased && duel.turn !== myRole);
   const totalSec = (duel.timeout_ms ? duel.timeout_ms : duelTimeoutMs) / 1000;
   const isSolo = !duel.defender_id;
   const attStored = duel.attacker_stored_time ?? totalSec;
@@ -107,10 +197,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     ? (duel.turn === "defender" ? Math.max(0, defStored - turnElapsed) : defStored)
     : totalSec;
   const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : totalSec) <= 3 && !showResult;
-  const myRole = meId === duel.attacker_id ? 'attacker' : meId === duel.defender_id ? 'defender' : null;
   const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
   const showSoloIntro = countdown !== null && isSolo;
   const showDuelIntro = countdown !== null && !isSolo;
+  const useVoiceInput = Boolean(voiceMode && duel && duel.category === "flags_img" && meId && meId === duel.attacker_id && !showResult);
 
   console.log("DuelModal question:", duel?.question);
 
@@ -174,63 +264,81 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
           ) : (
             <h2 className="text-2xl md:text-3xl font-bold mb-6 mt-2 leading-relaxed" data-testid="duel-question">{duel.question.q}</h2>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {duel.question.opts.map((opt, i) => {
-              const isCorrect = showResult && i === correct;
-              const myAnswer = meId === duel.attacker_id ? duel.attacker_answer : duel.defender_answer;
-              const isMine = showResult && i === myAnswer;
-              const isHiddenByEye = eyeHint === i && !showResult;
-              const optImg = duel.question.opts_img && duel.question.opts_img[i];
-              return (
-                <button
-                  key={i}
-                  data-testid={`answer-${i}`}
-                  disabled={!amInvolved || showResult || isHiddenByEye || (isTurnBased ? duel.turn !== myRole : alreadyAnswered) || busy}
-                  onClick={async () => {
-                    if (busy) return;
-                    setBusy(true);
-                    try {
-                      const res = await onAnswer(i);
-                      if (res && res.correct === false) {
-                        setWrongIdx(i);
-                        sfx.wrong();
-                        setTimeout(() => setWrongIdx(null), 600);
-                      } else {
-                        sfx.correct();
+          {useVoiceInput ? (
+            <div className="flex flex-col items-center gap-3">
+              <button
+                data-testid="voice-answer"
+                disabled={!amInvolved || showResult || busy || !myRole}
+                onClick={async () => {
+                  if (busy) return;
+                  setBusy(true);
+                  try {
+                    await startVoiceRecognition();
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="px-6 py-4 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-bold"
+              >
+                {voiceListening ? "🎤 يستمع..." : "🎤 أجب بصوتك"}
+              </button>
+              {voiceFeedback && <div className="text-sm text-cyan-300">{voiceFeedback}</div>}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {duel.question.opts.map((opt, i) => {
+                const isCorrect = showResult && i === correct;
+                const isHiddenByEye = eyeHint === i && !showResult;
+                const optImg = duel.question.opts_img && duel.question.opts_img[i];
+                return (
+                  <button
+                    key={i}
+                    data-testid={`answer-${i}`}
+                    disabled={!amInvolved || showResult || isHiddenByEye || (isTurnBased ? duel.turn !== myRole : alreadyAnswered) || busy}
+                    onClick={async () => {
+                      if (busy) return;
+                      setBusy(true);
+                      try {
+                        const res = await onAnswer(i);
+                        if (res && res.correct === false) {
+                          setWrongIdx(i);
+                          sfx.wrong();
+                          setTimeout(() => setWrongIdx(null), 600);
+                        } else {
+                          sfx.correct();
+                        }
+                      } catch (e) {
+                        toast.error(e?.response?.data?.detail || 'فشل');
+                      } finally {
+                        setBusy(false);
                       }
-                    } catch (e) {
-                      toast.error(e?.response?.data?.detail || 'فشل');
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  className={`p-4 rounded-xl text-base md:text-lg font-bold border-2 transition-all text-right ${
-                    (wrongIdx === i)
-                      ? "border-red-500 bg-red-500/20 animate-shake"
-                      : isHiddenByEye
-                      ? "opacity-20 line-through border-red-500/30 bg-red-500/10"
-                      : isCorrect
-                      ? "border-green-400 bg-green-400/20"
-                      : isMine
-                      ? "border-red-500 bg-red-500/20"
-                      : "border-white/10 bg-[#1A1A24] hover:bg-white/10 hover:border-white/30 disabled:opacity-40"
-                  }`}
-                >
-                  {optImg ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-gray-500 text-xs">{["أ", "ب", "ج", "د"][i]}</span>
-                      <img src={optImg} alt={`option ${i}`} onError={(e) => { e.currentTarget.style.display='none'; }} className="w-24 h-16 md:w-32 md:h-20 object-contain rounded border border-white/10 bg-black/30" />
-                    </div>
-                  ) : (
-                    <>
-                      <span className="text-gray-500 ms-2">{["أ", "ب", "ج", "د"][i]}.</span>
-                      {opt}
-                    </>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                    }}
+                    className={`p-4 rounded-xl text-base md:text-lg font-bold border-2 transition-all text-right ${
+                      (wrongIdx === i)
+                        ? "border-red-500 bg-red-500/20 animate-shake"
+                        : isHiddenByEye
+                        ? "opacity-20 line-through border-red-500/30 bg-red-500/10"
+                        : isCorrect
+                        ? "border-green-400 bg-green-400/20"
+                        : "border-white/10 bg-[#1A1A24] hover:bg-white/10 hover:border-white/30 disabled:opacity-40"
+                    }`}
+                  >
+                    {optImg ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-gray-500 text-xs">{["أ", "ب", "ج", "د"][i]}</span>
+                        <img src={optImg} alt={`option ${i}`} onError={(e) => { e.currentTarget.style.display='none'; }} className="w-24 h-16 md:w-32 md:h-20 object-contain rounded border border-white/10 bg-black/30" />
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-gray-500 ms-2">{["أ", "ب", "ج", "د"][i]}.</span>
+                        {opt}
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {showResult && (
             <div className="mt-6 text-center">
