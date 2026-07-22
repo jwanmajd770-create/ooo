@@ -147,6 +147,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       setVoiceListening(false);
     };
     recognition.onresult = (event) => {
+      console.error("🔥 ENTERED onresult 🔥");
       console.log("VOICE: result", event.results);
       const results = Array.from(event.results || []);
       const latest = results[results.length - 1];
@@ -160,7 +161,12 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
 
       setVoiceInterim("");
       const answerText = duel?.question?.opts?.[duel?.question?.a] || correctAnswerRef.current || "";
-      console.log("COMPARING:", { transcript, answerText, a: duel?.question?.a, opts: duel?.question?.opts });
+      console.error("🔥 COMPARING 🔥", {
+        transcript,
+        answerText,
+        a: duel?.question?.a,
+        opts: duel?.question?.opts
+      });
       const normalizedTranscript = normalizeArabic(transcript);
       const normalizedAnswer = normalizeArabic(answerText);
       const similarity = normalizedAnswer && normalizedTranscript
