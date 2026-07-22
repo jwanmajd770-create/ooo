@@ -279,3 +279,8 @@ def test_get_random_question_uses_queue_without_repeats_until_exhausted():
     assert q1["q"] == "q1"
     assert q2["q"] == "q2"
     assert q3["q"] == "q1"
+
+
+def test_flags_categories_use_flags_img():
+    assert any(c["id"] == "flags_img" for c in server.FLAGS_CATEGORIES)
+    assert not any(c["id"] == "capitals" for c in server.FLAGS_CATEGORIES)

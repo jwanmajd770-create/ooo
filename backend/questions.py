@@ -26,7 +26,7 @@ CATEGORIES = [
     {"id": "anime", "name": "أنمي ومانجا", "icon": "🎌", "color": "#FF007F"},
     {"id": "games", "name": "ألعاب فيديو", "icon": "🎮", "color": "#00F0FF"},
     {"id": "quran", "name": "القرآن الكريم", "icon": "📖", "color": "#39FF14"},
-    {"id": "capitals", "name": "عواصم ودول", "icon": "🗺️", "color": "#FFFF00"},
+    {"id": "flags_img", "name": "أعلام الدول", "icon": "🚩", "color": "#FFFF00"},
     {"id": "inventions", "name": "اختراعات", "icon": "💡", "color": "#FFFF00"},
     {"id": "celebs", "name": "مشاهير عرب", "icon": "⭐", "color": "#FF007F"},
     {"id": "health", "name": "صحة وطب", "icon": "⚕️", "color": "#39FF14"},
@@ -37,7 +37,7 @@ CATEGORIES = [
 ]
 
 FLAGS_CATEGORIES = [
-    next(c for c in CATEGORIES if c["id"] == "capitals"),
+    next(c for c in CATEGORIES if c["id"] == "flags_img"),
     *IMAGE_CATEGORIES,
 ]
 
@@ -4569,3 +4569,6 @@ for _cat, _qs in IMAGE_QUESTIONS.items():
         QUESTIONS[_cat].extend(_qs)
     else:
         QUESTIONS[_cat] = _qs
+
+if "flags_img" in IMAGE_QUESTIONS:
+    QUESTIONS.setdefault("flags_img", []).extend(IMAGE_QUESTIONS["flags_img"])

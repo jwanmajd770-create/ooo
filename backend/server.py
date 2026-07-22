@@ -685,14 +685,14 @@ async def attack(req: AttackReq):
     if target_owner is None:
         defender_id = None
         if game.get("mode") == "flags_only":
-            category = me.get("current_category", me["category_id"]) if me.get("current_category", me["category_id"]) in flags_allowed_ids else "capitals"
+            category = me.get("current_category", me["category_id"]) if me.get("current_category", me["category_id"]) in flags_allowed_ids else "flags_img"
         else:
             category = me.get("current_category", me["category_id"])
     else:
         defender = next(p for p in game["players"] if p["id"] == target_owner)
         defender_id = defender["id"]
         if game.get("mode") == "flags_only":
-            category = defender.get("current_category", defender["category_id"]) if defender.get("current_category", defender["category_id"]) in flags_allowed_ids else "capitals"
+            category = defender.get("current_category", defender["category_id"]) if defender.get("current_category", defender["category_id"]) in flags_allowed_ids else "flags_img"
         else:
             category = defender.get("current_category", defender["category_id"])
 
@@ -714,7 +714,8 @@ async def attack(req: AttackReq):
                 all_cats = [c["id"] for c in CATEGORIES if c["id"] not in ("football",)]
                 category = _r.choice(all_cats) if all_cats else category
 
-    question = get_random_question(category, game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+    force_image = (game.get("mode") == "flags_only") or category == "flags_img"
+    question = get_random_question(category, game.get("custom_questions"), force_image=force_image, game=game)
     if not question:
         raise HTTPException(500, "لا توجد أسئلة")
     timeout = DUEL_TIMEOUT_MS
@@ -814,7 +815,7 @@ async def answer(req: AnswerReq):
 
     d["turn_start_ts"] = now_sec
     newq = get_random_question(d["category"], game.get("custom_questions"),
-                               force_image=(game.get("mode") == "flags_only"), game=game)
+                               force_image=((game.get("mode") == "flags_only") or d["category"] == "flags_img"), game=game)
     if newq:
         d["question"] = newq
     touch(game)
@@ -856,7 +857,7 @@ async def duel_pass(req: DuelPassReq):
     d["turn"] = other
     d["turn_start_ts"] = now_sec
     newq = get_random_question(d["category"], game.get("custom_questions"),
-                               force_image=(game.get("mode") == "flags_only"), game=game)
+                               force_image=((game.get("mode") == "flags_only") or d["category"] == "flags_img"), game=game)
     if newq:
         d["question"] = newq
     touch(game)
@@ -885,7 +886,7 @@ async def use_powerup(req: PowerUpReq):
         skip_turn_id = d["attacker_id"] if d.get("turn") == "attacker" else d.get("defender_id")
         if me["id"] != skip_turn_id:
             raise HTTPException(400, "يمكن التخطي فقط في دورك")
-        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=(game.get("mode") == "flags_only"), game=game)
+        d["question"] = get_random_question(d["category"], game.get("custom_questions"), force_image=((game.get("mode") == "flags_only") or d["category"] == "flags_img"), game=game)
         d["started_at"] = now_ms()
         d["turn_start_ts"] = now_ms() / 1000.0
         d["eye_hints"] = {}  # new question -> old hints invalid
