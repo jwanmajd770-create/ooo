@@ -15,7 +15,12 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState(null);
   const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceInterim, setVoiceInterim] = useState("");
   const recognitionRef = useRef(null);
+  const voiceActiveRef = useRef(false);
+  const duelRef = useRef(duel);
+  const onAnswerRef = useRef(onAnswer);
+  const answerRef = useRef("");
 
   // إعادة الرسم كل ربع ثانية ليتحرك العدّاد
   useEffect(() => {
@@ -90,30 +95,61 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   }, [duel, duelTimeoutMs, meId]);
 
   useEffect(() => {
+    duelRef.current = duel;
+  }, [duel]);
+
+  useEffect(() => {
+    onAnswerRef.current = onAnswer;
+  }, [onAnswer]);
+
+  useEffect(() => {
+    answerRef.current = duel?.question?.opts?.[duel?.question?.a] || "";
+  }, [duel?.question?.a, duel?.question?.opts]);
+
+  useEffect(() => {
+    voiceActiveRef.current = voiceActive;
+  }, [voiceActive]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition || recognitionRef.current) return;
 
     const recognition = new SpeechRecognition();
     recognition.lang = "ar-SA";
     recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
 
-    recognition.onstart = () => setVoiceListening(true);
-    recognition.onend = () => setVoiceListening(false);
+    recognition.onstart = () => {
+      setVoiceListening(true);
+      setVoiceFeedback("جارٍ الاستماع...");
+      setVoiceInterim("");
+    };
+    recognition.onend = () => {
+      setVoiceListening(false);
+      if (voiceActiveRef.current && !duelRef.current?.resolved) {
+        try {
+          recognitionRef.current?.start();
+        } catch (_) {}
+      }
+    };
     recognition.onerror = () => {
-      setVoiceFeedback("حاول مرة أخرى");
+      if (!voiceActiveRef.current) return;
+      setVoiceFeedback("لم أفهم، حاول مرة أخرى");
       setVoiceListening(false);
     };
-    recognition.onresult = async (event) => {
-      const transcript = Array.from(event.results || [])
-        .map((result) => result[0]?.transcript || "")
-        .join(" ")
-        .trim();
-      if (!transcript) {
-        setVoiceFeedback("حاول مرة أخرى");
+    recognition.onresult = (event) => {
+      const results = Array.from(event.results || []);
+      const transcript = results.map((result) => result[0]?.transcript || "").join(" ").trim();
+      const latest = results[results.length - 1];
+
+      if (!latest?.isFinal) {
+        setVoiceInterim(transcript);
+        setVoiceFeedback("جارٍ الاستماع...");
         return;
       }
+
+      setVoiceInterim("");
 
       const normalizeArabic = (value) =>
         (value || "")
@@ -123,7 +159,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
           .replace(/\s+/g, "")
           .replace(/[^\p{L}\p{N}]/gu, "");
 
-      const answerText = duel?.question?.opts?.[duel?.question?.a] || "";
+      const answerText = answerRef.current;
       const normalizedTranscript = normalizeArabic(transcript);
       const normalizedAnswer = normalizeArabic(answerText);
       const similarity = normalizedAnswer && normalizedTranscript
@@ -134,27 +170,42 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       if (score >= 80) {
         setVoiceFeedback("✅");
         setVoiceActive(false);
-        await onAnswer(duel.question.a);
+        voiceActiveRef.current = false;
+        setVoiceListening(false);
+        try {
+          recognition.stop();
+        } catch (_) {}
+        onAnswerRef.current?.(duelRef.current?.question?.a);
       } else {
-        setVoiceFeedback("حاول مرة أخرى");
+        setVoiceFeedback("لم أفهم، حاول مرة أخرى");
+        setVoiceListening(false);
       }
     };
 
     recognitionRef.current = recognition;
     return () => {
-      recognition.stop();
+      try {
+        recognition.stop();
+      } catch (_) {}
       recognitionRef.current = null;
     };
-  }, [duel?.question?.a, duel?.question?.opts, onAnswer]);
+  }, []);
 
   const startVoiceRecognition = async () => {
     if (!recognitionRef.current) {
       setVoiceFeedback("المتصفح لا يدعم التعرف على الصوت");
       return;
     }
-    setVoiceFeedback(null);
+    if (voiceListening) return;
+    setVoiceFeedback("جارٍ الاستماع...");
+    setVoiceInterim("");
     setVoiceActive(true);
-    recognitionRef.current.start();
+    voiceActiveRef.current = true;
+    try {
+      recognitionRef.current.start();
+    } catch (_) {
+      setVoiceFeedback("لم أفهم، حاول مرة أخرى");
+    }
   };
 
   const levenshtein = (a, b) => {
@@ -283,6 +334,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                 {voiceListening ? "🎤 يستمع..." : "🎤 أجب بصوتك"}
               </button>
               {voiceFeedback && <div className="text-sm text-cyan-300">{voiceFeedback}</div>}
+              {voiceInterim ? <div className="text-sm text-cyan-200">{voiceInterim}</div> : null}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
