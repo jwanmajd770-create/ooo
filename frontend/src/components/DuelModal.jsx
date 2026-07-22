@@ -21,6 +21,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const duelRef = useRef(duel);
   const onAnswerRef = useRef(onAnswer);
   const answerRef = useRef("");
+  const correctAnswerRef = useRef(null);
 
   // إعادة الرسم كل ربع ثانية ليتحرك العدّاد
   useEffect(() => {
@@ -107,6 +108,12 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   }, [duel?.question?.a, duel?.question?.opts]);
 
   useEffect(() => {
+    if (duel?.question?.opts && duel?.question?.a !== undefined) {
+      correctAnswerRef.current = duel.question.opts[duel.question.a];
+    }
+  }, [duel?.question]);
+
+  useEffect(() => {
     voiceActiveRef.current = voiceActive;
   }, [voiceActive]);
 
@@ -148,7 +155,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       }
 
       setVoiceInterim("");
-      const correctAnswer = duelRef.current?.question?.opts?.[duelRef.current?.question?.a] || answerRef.current || "";
+      const correctAnswer = correctAnswerRef.current || answerRef.current || "";
       const normalizedTranscript = normalizeArabic(transcript);
       const normalizedAnswer = normalizeArabic(correctAnswer);
       const similarity = normalizedAnswer && normalizedTranscript
