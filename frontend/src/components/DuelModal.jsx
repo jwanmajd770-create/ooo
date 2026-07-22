@@ -156,7 +156,13 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
         : 0;
       const score = Math.max(0, Math.round(similarity * 100));
 
-      console.log("voice debug", { transcript, correctAnswer, score, normalizedTranscript, normalizedAnswer });
+      console.log("VOICE DEBUG:", {
+        transcript: transcript,
+        correctAnswer: duel?.question?.opts?.[duel?.question?.a],
+        questionA: duel?.question?.a,
+        opts: duel?.question?.opts,
+        similarity: similarity
+      });
 
       try {
         recognition.stop();
