@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 
 export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000, onPass, voiceMode = false }) {
+  console.error("🔥 BUILD_CHECK: DuelModal loaded - version 2025 🔥");
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
