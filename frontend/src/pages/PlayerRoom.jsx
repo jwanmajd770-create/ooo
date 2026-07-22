@@ -99,6 +99,28 @@ export default function PlayerRoom() {
     }
   }, [state?.state]);
 
+  // ⚠️ جميع الـ hooks يجب أن تُستدعى قبل أي early return لتجنّب rules-of-hooks
+  const answer = useCallback(async (idx) => {
+    try {
+      const r = await api.answer(code, token, idx);
+      try {
+        await refreshState();
+      } catch (_) {}
+      return r;
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "فشل");
+      throw e;
+    }
+  }, [code, token, refreshState]);
+
+  const duelPass = useCallback(async () => {
+    try { const r = await api.duelPass(code, token); sfx.powerup(); return r; } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); throw e; }
+  }, [code, token]);
+
+  const useSkip = useCallback(async () => { try { await api.powerup(code, token, "skip"); sfx.powerup(); toast.success("سؤال جديد"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
+  const useTime = useCallback(async () => { try { await api.powerup(code, token, "time"); sfx.powerup(); toast.success("+5 ثواني"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
+  const useEye = useCallback(async () => { try { const r = await api.powerup(code, token, "eye"); sfx.powerup(); setEyeHint(r.eye_hint); toast.success("خيار خاطئ حُذف"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
+
   if (error) return <div className="p-6 text-red-400">{error}</div>;
   if (!state) return <div className="p-6 text-center">جاري التحميل...</div>;
 
@@ -142,29 +164,8 @@ export default function PlayerRoom() {
     }
   };
 
-  const answer = useCallback(async (idx) => {
-    try {
-      const r = await api.answer(code, token, idx);
-      try {
-        await refreshState();
-      } catch (_) {}
-      return r;
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "فشل");
-      throw e;
-    }
-  }, [code, token, refreshState]);
-
-  const duelPass = useCallback(async () => {
-    try { const r = await api.duelPass(code, token); sfx.powerup(); return r; } catch (e) { toast.error(e?.response?.data?.detail || "فشل"); throw e; }
-  }, [code, token]);
-
   const shields = {};
   state.players.forEach((p) => { if (p.shield_on) shields[p.id] = p.shield_on; });
-
-  const useSkip = useCallback(async () => { try { await api.powerup(code, token, "skip"); sfx.powerup(); toast.success("سؤال جديد"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
-  const useTime = useCallback(async () => { try { await api.powerup(code, token, "time"); sfx.powerup(); toast.success("+5 ثواني"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
-  const useEye = useCallback(async () => { try { const r = await api.powerup(code, token, "eye"); sfx.powerup(); setEyeHint(r.eye_hint); toast.success("خيار خاطئ حُذف"); } catch (e) { toast.error(e?.response?.data?.detail); } }, [code, token]);
 
   return (
     <div className="min-h-screen p-3 md:p-6">

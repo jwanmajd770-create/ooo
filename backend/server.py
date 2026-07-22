@@ -350,6 +350,10 @@ def public_game(game):
                 q_pub["img"] = d["question"]["img"]
             if d["question"].get("opts_img"):
                 q_pub["opts_img"] = d["question"]["opts_img"]
+            if d["question"].get("a") is not None:
+                q_pub["a"] = d["question"]["a"]
+            if d["question"].get("answer_text"):
+                q_pub["answer_text"] = d["question"]["answer_text"]
             g["duel"] = {
                 "attacker_id": d["attacker_id"],
                 "defender_id": d.get("defender_id"),

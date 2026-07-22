@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { getVoiceFeedbackMessage } from "../lib/voiceFeedback";
 
 export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTime, onEye, myPowerups, eyeHint, duelTimeoutMs = 12000, onPass, voiceMode = false }) {
-  console.error("🔥 BUILD_CHECK: DuelModal loaded - version 2025 🔥");
   const effectiveTimeout = duel?.timeout_ms || duelTimeoutMs;
   const [countdown, setCountdown] = useState(null);
   const lastDuelStart = useRef(null);
@@ -20,6 +19,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const [voiceInterim, setVoiceInterim] = useState("");
   const recognitionRef = useRef(null);
   const voiceActiveRef = useRef(false);
+  const shouldListenRef = useRef(false);
+  const voiceListeningRef = useRef(false);
   const duelRef = useRef(duel);
   const onAnswerRef = useRef(onAnswer);
   const answerRef = useRef("");
@@ -110,8 +111,15 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   }, [duel?.question?.a, duel?.question?.opts]);
 
   useEffect(() => {
-    if (duel?.question?.opts && duel?.question?.a !== undefined) {
-      correctAnswerRef.current = duel.question.opts[duel.question.a];
+    // الأولوية: answer_text من الـ backend (للـ flags_img)
+    // ثم fallback: opts[a] إن كان a معروفاً (لن يحدث في الـ production لأن a مخفي)
+    const q = duel?.question;
+    if (q?.answer_text) {
+      correctAnswerRef.current = q.answer_text;
+    } else if (q?.opts && q?.a !== undefined) {
+      correctAnswerRef.current = q.opts[q.a];
+    } else {
+      correctAnswerRef.current = null;
     }
   }, [duel?.question]);
 
@@ -119,138 +127,215 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     voiceActiveRef.current = voiceActive;
   }, [voiceActive]);
 
+  // إنشاء SpeechRecognition مرة واحدة فقط عند mount
+  // نستخدم refs (correctAnswerRef, duelRef, onAnswerRef, voiceActiveRef) داخل onresult
+  // للوصول لأحدث القيم دون إعادة إنشاء الـ instance عند كل poll
   useEffect(() => {
     if (typeof window === "undefined") return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    // أعد الإنشاء كلما تغير السؤال
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch (_) {}
-      recognitionRef.current = null;
+    if (!SpeechRecognition) {
+      setVoiceFeedback("متصفحك لا يدعم التعرف الصوتي");
+      return;
     }
 
     const recognition = new SpeechRecognition();
+    // continuous = true: يبقى المايك مفتوحاً طوال دور اللاعب
+    // onresult يُطلَق بشكل متكرّر مع كل جملة/عبارة يقولها اللاعب
     recognition.lang = "ar-SA";
     recognition.continuous = false;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+    let hasGotResult = false;
+    let langFallbackTried = false;
 
     recognition.onstart = () => {
-      console.log("VOICE: started");
+      hasGotResult = false;
+      voiceListeningRef.current = true;
+      console.log("VOICE: started, lang =", recognition.lang);
       setVoiceListening(true);
-      setVoiceFeedback("جارٍ الاستماع...");
+      setVoiceFeedback("🎤 يستمع... تكلّم الآن");
       setVoiceInterim("");
     };
 
     recognition.onend = () => {
-      console.log("VOICE: ended");
+      voiceListeningRef.current = false;
+      console.log("VOICE: ended (gotResult:", hasGotResult, ", shouldListen:", shouldListenRef.current, ")");
       setVoiceListening(false);
-      if (voiceActiveRef.current && !duelRef.current?.resolved) {
-        setVoiceFeedback("لم أتمكن من فهم الصوت. حاول مرة أخرى");
+
+      // لا نعيد التشغيل تلقائياً بعد end؛ هذا يمنع الوميض والتوقف المتكرر.
+      if (!hasGotResult && !langFallbackTried && recognition.lang === "ar-SA" && shouldListenRef.current) {
+        langFallbackTried = true;
+        recognition.lang = "ar-EG";
+        console.log("VOICE: language fallback prepared, but not auto-restarted");
+        setVoiceFeedback("جارٍ انتظار التحدث..." );
       }
     };
 
     recognition.onerror = (e) => {
-      console.error("VOICE: error", e?.error, e?.message);
-      if (!voiceActiveRef.current) return;
+      console.error("VOICE: error", { error: e?.error, message: e?.message });
+      if (e?.error === "no-speech" || e?.error === "aborted") {
+        setVoiceFeedback("لم أسمع صوتًا واضحًا — حاول مرة أخرى");
+        return;
+      }
+      if (e?.error === "network") {
+        setVoiceFeedback("تعذر الوصول إلى خدمة التعرف الصوتي الآن. جرّب لاحقًا أو استخدم الإجابة اليدوية");
+        shouldListenRef.current = false;
+        return;
+      }
+      if (e?.error === "not-allowed" || e?.error === "service-not-allowed" || e?.error === "audio-capture") {
+        setVoiceFeedback(getVoiceFeedbackMessage(e?.error));
+        shouldListenRef.current = false;
+        return;
+      }
       setVoiceFeedback(getVoiceFeedbackMessage(e?.error));
-      setVoiceListening(false);
     };
 
     recognition.onresult = (event) => {
-      console.error("🔥 ENTERED onresult 🔥");
+      // في continuous mode: event.results يتراكم — نأخذ آخر نتيجة فقط
       const results = Array.from(event.results || []);
       const latest = results[results.length - 1];
-      const transcript = results.map((r) => r[0]?.transcript || "").join(" ").trim();
+      const transcript = (latest?.[0]?.transcript || "").trim();
+      if (!transcript) return;
 
+      // نتيجة interim (اللاعب لا يزال يتكلم) — نعرضها ونستمر
       if (!latest?.isFinal) {
         setVoiceInterim(transcript);
-        setVoiceFeedback("جارٍ الاستماع...");
         return;
       }
 
+      hasGotResult = true;
+      console.log("VOICE: final result:", transcript);
       setVoiceInterim("");
 
-      // استخدم الـ ref دائماً — مو الـ closure
+      // قارن بالإجابة الصحيحة (نستخدم ref للحصول على أحدث قيمة)
       const answerText = correctAnswerRef.current || "";
-      console.error("🔥 COMPARING 🔥", { transcript, answerText });
+      const isMatch = isVoiceAnswerMatch(transcript, answerText);
+      console.log("VOICE: match result", { transcript, answerText, isMatch });
 
-      const normalizedT = normalizeArabic(transcript);
-      const normalizedA = normalizeArabic(answerText);
-      const similarity = normalizedA && normalizedT
-        ? (1 - levenshtein(normalizedT, normalizedA) / Math.max(normalizedT.length, normalizedA.length))
-        : 0;
-      const score = Math.round(similarity * 100);
+      if (isMatch) {
+        // ✅ إجابة صحيحة — احسب index الإجابة من opts (لأن duel.question.a مخفي في الـ production)
+        const currentDuel = duelRef.current;
+        const opts = currentDuel?.question?.opts || [];
+        let correctIdx = opts.findIndex((opt) => normalizeArabic(opt) === normalizeArabic(answerText));
+        if (correctIdx < 0) correctIdx = currentDuel?.question?.a ?? 0; // fallback
+        console.log("VOICE: submitting answer at index", correctIdx);
 
-      try { recognition.stop(); } catch (_) {}
-      setVoiceListening(false);
-      setVoiceActive(false);
-      voiceActiveRef.current = false;
-
-      if (score >= 80) {
-        setVoiceFeedback("✅");
-        onAnswerRef.current?.(duelRef.current?.question?.a);
+        setVoiceFeedback(`✅ ${transcript}`);
+        shouldListenRef.current = false;
+        voiceActiveRef.current = false;
+        setVoiceActive(false);
+        try { recognition.stop(); } catch (_) {}
+        onAnswerRef.current?.(correctIdx);
       } else {
-        setVoiceFeedback(`❌ قلت: "${transcript}" — حاول مرة أخرى`);
+        // ❌ لم يطابق — لا نعيد تشغيل الاستماع تلقائياً؛ نترك المايك مفتوحاً حتى يغيّر المستخدم الدور أو يوقفه
+        setVoiceFeedback(`سمعتك: "${transcript}" — استمر بالمحاولة`);
       }
     };
 
     recognitionRef.current = recognition;
 
     return () => {
+      shouldListenRef.current = false;
       try { recognition.stop(); } catch (_) {}
       recognitionRef.current = null;
     };
-  }, [duel?.question?.a]); // أعد الإنشاء فقط عند تغيير السؤال
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // إنشاء مرة واحدة فقط — يمنع تدمير الـ instance أثناء الاستماع بسبب polling
 
-  const startVoiceRecognition = async () => {
-    console.error("startVoiceRecognition called", { voiceListening, hasRecognition: !!recognitionRef.current });
-    if (!recognitionRef.current) {
-      console.error("No recognition instance available");
-      setVoiceFeedback("المتصفح لا يدعم التعرف على الصوت");
+  // 🎤 auto-listen: افتح المايك تلقائياً لصاحب الدور الحالي في مبارزة flags_img
+  // - Solo (خانة فارغة): المايك مفتوح للمهاجم فقط ← عند التطابق، يحتل الخانة فوراً
+  // - Duel (مهاجم vs مدافع): المايك يفتح لصاحب الدور. عند إجابة صحيحة، الدور ينتقل تلقائياً للطرف الآخر (من الـ backend)
+  useEffect(() => {
+    if (!duel || duel.resolved) {
+      shouldListenRef.current = false;
       return;
     }
-    if (voiceListening) {
-      console.error("Voice already listening, skipping start");
+    const isSolo = !duel.defender_id;
+    const isMyTurn = isSolo
+      ? meId === duel.attacker_id
+      : (
+          (duel.turn === "attacker" && meId === duel.attacker_id) ||
+          (duel.turn === "defender" && meId === duel.defender_id)
+        );
+    const myVoiceTurn = Boolean(
+      voiceMode &&
+      duel.category === "flags_img" &&
+      meId &&
+      isMyTurn
+    );
+    if (!myVoiceTurn) {
+      if (shouldListenRef.current) {
+        shouldListenRef.current = false;
+        voiceActiveRef.current = false;
+        setVoiceActive(false);
+        setVoiceListening(false);
+        try { recognitionRef.current?.stop(); } catch (_) {}
+      }
       return;
     }
-    setVoiceFeedback("جارٍ الاستماع...");
-    setVoiceInterim("");
-    setVoiceActive(true);
+    if (!recognitionRef.current) return;
+    if (shouldListenRef.current) return;
+    shouldListenRef.current = true;
     voiceActiveRef.current = true;
+    setVoiceActive(true);
+    setVoiceFeedback("🎤 يستمع... تكلّم الآن");
     try {
-      console.error("About to start recognition");
       recognitionRef.current.start();
-      console.error("recognition.start() returned");
     } catch (e) {
-      console.error("START ERROR:", e);
-      setVoiceFeedback("لم أتمكن من فهم الصوت. حاول مرة أخرى");
+      if (e?.name !== "InvalidStateError") {
+        console.warn("VOICE: auto-start failed", e?.message);
+      }
+      setVoiceFeedback("تعذر بدء المايكروفون. جرّب مرة أخرى أو استخدم الإجابة اليدوية");
     }
-  };
+  }, [voiceMode, meId, duel?.attacker_id, duel?.defender_id, duel?.category, duel?.turn, duel?.resolved, duel?.started_at]);
 
-  const normalizeArabic = (value) =>
-    (value || "")
+  const normalizeArabic = (value, preserveSpaces = false) => {
+    let normalized = (value || "")
       .toString()
       .normalize("NFKD")
-      .replace(/[\u064B-\u065F\u0670]/g, "")
-      .replace(/\s+/g, "")
-      .replace(/[^\p{L}\p{N}]/gu, "");
+      // 1) إزالة كل التشكيل والحركات (فتحة، ضمة، كسرة، شدة، تنوين، سكون...)
+      .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, "")
+      // 2) إزالة التطويل (كشيدة)
+      .replace(/\u0640/g, "")
+      // 3) توحيد الألف: أ إ آ ٱ → ا
+      .replace(/[\u0622\u0623\u0625\u0671]/g, "\u0627")
+      // 4) توحيد الياء: ى → ي
+      .replace(/\u0649/g, "\u064A")
+      // 5) توحيد التاء المربوطة: ة → ه
+      .replace(/\u0629/g, "\u0647")
+      // 6) توحيد الهمزات: ؤ → و ، ئ → ي ، ء → (حذف)
+      .replace(/\u0624/g, "\u0648")
+      .replace(/\u0626/g, "\u064A")
+      .replace(/\u0621/g, "");
 
-  const levenshtein = (a, b) => {
-    const matrix = Array.from({ length: a.length + 1 }, () => Array(b.length + 1).fill(0));
-    for (let i = 0; i <= a.length; i += 1) matrix[i][0] = i;
-    for (let j = 0; j <= b.length; j += 1) matrix[0][j] = j;
-    for (let i = 1; i <= a.length; i += 1) {
-      for (let j = 1; j <= b.length; j += 1) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j - 1] + cost,
-        );
-      }
+    if (preserveSpaces) {
+      normalized = normalized
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    } else {
+      normalized = normalized
+        .replace(/\s+/g, "")
+        .replace(/[^\p{L}\p{N}]/gu, "");
     }
-    return matrix[a.length][b.length];
+
+    return normalized.toLowerCase();
+  };
+
+  const isVoiceAnswerMatch = (transcript, answerText) => {
+    const normalizedT = normalizeArabic(transcript);
+    const normalizedA = normalizeArabic(answerText);
+
+    if (!normalizedT || !normalizedA) return false;
+    if (normalizedT === normalizedA) return true;
+    if (normalizedT.includes(normalizedA) || normalizedA.includes(normalizedT)) return true;
+
+    const wordsT = normalizeArabic(transcript, true).split(/\s+/).filter(Boolean);
+    const wordsA = normalizeArabic(answerText, true).split(/\s+/).filter(Boolean);
+    if (!wordsT.length || !wordsA.length) return false;
+
+    const sharedWords = wordsT.filter((word) => wordsA.includes(word));
+    return sharedWords.length > 0 && sharedWords.length >= Math.max(1, Math.min(wordsA.length, wordsT.length) - 1);
   };
 
   if (!duel) return null;
@@ -279,9 +364,15 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
   const showSoloIntro = countdown !== null && isSolo;
   const showDuelIntro = countdown !== null && !isSolo;
-  const useVoiceInput = Boolean(voiceMode && duel && duel.category === "flags_img" && meId && meId === duel.attacker_id && !showResult);
-
-  console.log("DuelModal question:", duel?.question);
+  const useVoiceInput = Boolean(voiceMode && duel && duel.category === "flags_img" && meId && (meId === duel.attacker_id || meId === duel.defender_id) && !showResult);
+  const isMyVoiceTurn = useVoiceInput && (
+    isSolo
+      ? meId === duel.attacker_id
+      : (
+          (duel.turn === "attacker" && meId === duel.attacker_id) ||
+          (duel.turn === "defender" && meId === duel.defender_id)
+        )
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-3 overflow-y-auto">
@@ -344,20 +435,50 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
             <h2 className="text-2xl md:text-3xl font-bold mb-6 mt-2 leading-relaxed" data-testid="duel-question">{duel.question.q}</h2>
           )}
           {useVoiceInput ? (
-            <div className="flex flex-col items-center gap-3">
-              <button
-                data-testid="voice-answer"
-                disabled={!amInvolved || showResult || voiceListening || !myRole || duel.turn !== myRole}
-                onClick={async () => {
-                  console.error("MIC CLICKED");
-                  await startVoiceRecognition();
-                }}
-                className="px-6 py-4 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-bold"
+            <div className="flex flex-col items-center gap-4 py-4" data-testid="voice-panel">
+              <div
+                className={`relative flex items-center justify-center rounded-full transition-all ${
+                  voiceListening
+                    ? "bg-cyan-500/30 border-4 border-cyan-400 shadow-[0_0_40px_rgba(0,240,255,0.6)] animate-pulse"
+                    : isMyVoiceTurn
+                      ? "bg-white/5 border-2 border-white/20"
+                      : "bg-white/5 border-2 border-white/10 opacity-40"
+                }`}
+                style={{ width: 120, height: 120 }}
               >
-                {voiceListening ? "🎤 يستمع..." : "🎤 أجب بصوتك"}
-              </button>
-              {voiceFeedback && <div className="text-sm text-cyan-300">{voiceFeedback}</div>}
-              {voiceInterim ? <div className="text-sm text-cyan-200">{voiceInterim}</div> : null}
+                <span className="text-6xl">🎤</span>
+                {voiceListening && (
+                  <>
+                    <span className="absolute inset-0 rounded-full border-2 border-cyan-400/60 animate-ping" />
+                    <span className="absolute inset-[-8px] rounded-full border border-cyan-400/30 animate-ping" style={{ animationDelay: "0.4s" }} />
+                  </>
+                )}
+              </div>
+              <div className="text-center min-h-[3rem]">
+                {isMyVoiceTurn ? (
+                  <>
+                    {voiceFeedback && (
+                      <div className="text-base font-bold text-cyan-300" data-testid="voice-feedback">
+                        {voiceFeedback}
+                      </div>
+                    )}
+                    {voiceInterim && (
+                      <div className="text-lg mt-2 text-white/90 tracking-wide" data-testid="voice-interim">
+                        "{voiceInterim}"
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-base font-bold text-yellow-300/80" data-testid="voice-waiting">
+                    ⏳ دور الخصم — انتظر
+                  </div>
+                )}
+              </div>
+              <div className="text-xs text-gray-500 mt-2 text-center">
+                {isSolo
+                  ? "قل اسم البلد لتحتل الخانة فوراً"
+                  : (isMyVoiceTurn ? "قل اسم البلد — الدور ينتقل للخصم عند الإجابة الصحيحة" : "المايك مغلق أثناء دور الخصم")}
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
