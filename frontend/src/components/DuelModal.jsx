@@ -128,22 +128,26 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     recognition.interimResults = true;
 
     recognition.onstart = () => {
+      console.log("VOICE: started");
       setVoiceListening(true);
       setVoiceFeedback("جارٍ الاستماع...");
       setVoiceInterim("");
     };
     recognition.onend = () => {
+      console.log("VOICE: ended");
       setVoiceListening(false);
       if (voiceActiveRef.current && !duelRef.current?.resolved) {
         setVoiceFeedback("لم أفهم، حاول مرة أخرى");
       }
     };
-    recognition.onerror = () => {
+    recognition.onerror = (e) => {
+      console.log("VOICE: error", e?.error, e?.message);
       if (!voiceActiveRef.current) return;
-      setVoiceFeedback("لم أفهم، حاول مرة أخرى");
+      setVoiceFeedback("حاول مرة أخرى");
       setVoiceListening(false);
     };
     recognition.onresult = (event) => {
+      console.log("VOICE: result", event.results);
       const results = Array.from(event.results || []);
       const latest = results[results.length - 1];
       const transcript = results.map((result) => result[0]?.transcript || "").join(" ").trim();
