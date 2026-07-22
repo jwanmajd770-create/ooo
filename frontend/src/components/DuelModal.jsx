@@ -159,9 +159,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       }
 
       setVoiceInterim("");
-      const correctAnswer = correctAnswerRef.current || answerRef.current || "";
+      const answerText = duel?.question?.opts?.[duel?.question?.a] || correctAnswerRef.current || "";
+      console.log("COMPARING:", { transcript, answerText, a: duel?.question?.a, opts: duel?.question?.opts });
       const normalizedTranscript = normalizeArabic(transcript);
-      const normalizedAnswer = normalizeArabic(correctAnswer);
+      const normalizedAnswer = normalizeArabic(answerText);
       const similarity = normalizedAnswer && normalizedTranscript
         ? (1 - levenshtein(normalizedTranscript, normalizedAnswer) / Math.max(normalizedTranscript.length, normalizedAnswer.length))
         : 0;
