@@ -201,18 +201,26 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   }, []);
 
   const startVoiceRecognition = async () => {
+    console.log("startVoiceRecognition called", { voiceListening, hasRecognition: !!recognitionRef.current });
     if (!recognitionRef.current) {
+      console.log("No recognition instance available");
       setVoiceFeedback("المتصفح لا يدعم التعرف على الصوت");
       return;
     }
-    if (voiceListening) return;
+    if (voiceListening) {
+      console.log("Voice already listening, skipping start");
+      return;
+    }
     setVoiceFeedback("جارٍ الاستماع...");
     setVoiceInterim("");
     setVoiceActive(true);
     voiceActiveRef.current = true;
     try {
+      console.log("About to start recognition");
       recognitionRef.current.start();
-    } catch (_) {
+      console.log("recognition.start() returned");
+    } catch (e) {
+      console.error("START ERROR:", e);
       setVoiceFeedback("لم أفهم، حاول مرة أخرى");
     }
   };
@@ -338,6 +346,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                 data-testid="voice-answer"
                 disabled={!amInvolved || showResult || busy || !myRole}
                 onClick={async () => {
+                  console.log("MIC CLICKED");
                   if (busy) return;
                   setBusy(true);
                   try {
