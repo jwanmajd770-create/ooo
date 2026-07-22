@@ -344,16 +344,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
             <div className="flex flex-col items-center gap-3">
               <button
                 data-testid="voice-answer"
-                disabled={!amInvolved || showResult || busy || !myRole}
+                disabled={!amInvolved || showResult || voiceListening || !myRole || duel.turn !== myRole}
                 onClick={async () => {
                   console.log("MIC CLICKED");
-                  if (busy) return;
-                  setBusy(true);
-                  try {
-                    await startVoiceRecognition();
-                  } finally {
-                    setBusy(false);
-                  }
+                  await startVoiceRecognition();
                 }}
                 className="px-6 py-4 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-bold"
               >
