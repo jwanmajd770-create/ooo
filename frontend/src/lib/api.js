@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const rawBackendUrl = (process.env.REACT_APP_BACKEND_URL || "").trim();
+const rawBackendUrl = (process.env.REACT_APP_BACKEND_URL || "https://ooo-production-9547.up.railway.app").trim();
 export const BACKEND_URL = rawBackendUrl;
 export const API = rawBackendUrl ? `${rawBackendUrl}/api` : "/api";
 

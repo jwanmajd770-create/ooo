@@ -209,14 +209,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   }, []);
 
   const startVoiceRecognition = async () => {
-    console.log("startVoiceRecognition called", { voiceListening, hasRecognition: !!recognitionRef.current });
+    console.error("startVoiceRecognition called", { voiceListening, hasRecognition: !!recognitionRef.current });
     if (!recognitionRef.current) {
-      console.log("No recognition instance available");
+      console.error("No recognition instance available");
       setVoiceFeedback("المتصفح لا يدعم التعرف على الصوت");
       return;
     }
     if (voiceListening) {
-      console.log("Voice already listening, skipping start");
+      console.error("Voice already listening, skipping start");
       return;
     }
     setVoiceFeedback("جارٍ الاستماع...");
@@ -224,9 +224,9 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     setVoiceActive(true);
     voiceActiveRef.current = true;
     try {
-      console.log("About to start recognition");
+      console.error("About to start recognition");
       recognitionRef.current.start();
-      console.log("recognition.start() returned");
+      console.error("recognition.start() returned");
     } catch (e) {
       console.error("START ERROR:", e);
       setVoiceFeedback("لم أفهم، حاول مرة أخرى");
@@ -354,7 +354,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
                 data-testid="voice-answer"
                 disabled={!amInvolved || showResult || voiceListening || !myRole || duel.turn !== myRole}
                 onClick={async () => {
-                  console.log("MIC CLICKED");
+                  console.error("MIC CLICKED");
                   await startVoiceRecognition();
                 }}
                 className="px-6 py-4 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 font-bold"
