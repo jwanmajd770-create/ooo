@@ -177,6 +177,9 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
 
       const normalizedT = normalizeArabic(transcript);
       const normalizedA = normalizeArabic(answerText);
+      const answerWords = normalizedA.split(/\s+/).filter((w) => w.length > 2);
+      const isPartialMatch = answerWords.some((word) => normalizedT.includes(word));
+      const contains = normalizedT.includes(normalizedA);
       const similarity = normalizedA && normalizedT
         ? (1 - levenshtein(normalizedT, normalizedA) / Math.max(normalizedT.length, normalizedA.length))
         : 0;
@@ -187,7 +190,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       setVoiceActive(false);
       voiceActiveRef.current = false;
 
-      if (score >= 80) {
+      if (isPartialMatch || contains || score >= 80) {
         setVoiceFeedback("✅");
         onAnswerRef.current?.(duelRef.current?.question?.a);
       } else {

@@ -226,7 +226,14 @@ export default function PlayerRoom() {
               ))}
             </div>
             <button
-              onClick={() => setVoicePreference((prev) => !prev)}
+              onClick={async () => {
+                try {
+                  await navigator.mediaDevices.getUserMedia({ audio: true });
+                  setVoicePreference((prev) => !prev);
+                } catch (e) {
+                  toast.error("تعذر الوصول إلى الميكروفون");
+                }
+              }}
               className={`mt-4 px-4 py-2 rounded-lg text-sm font-bold border ${
                 voicePreference
                   ? "bg-cyan-400 text-black border-cyan-300"
