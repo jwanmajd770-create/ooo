@@ -279,7 +279,14 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
   const showSoloIntro = countdown !== null && isSolo;
   const showDuelIntro = countdown !== null && !isSolo;
-  const useVoiceInput = Boolean(voiceMode && duel && duel.category === "flags_img" && meId && meId === duel.attacker_id && !showResult);
+  const useVoiceInput = Boolean(
+    voiceMode &&
+    duel &&
+    ["flags_img", "players_img", "actors_img", "anime_img", "brands_img", "clubs_img", "apps_img", "landmarks_img"].includes(duel?.category) &&
+    meId &&
+    meId === duel.attacker_id &&
+    !showResult
+  );
 
   console.log("DuelModal question:", duel?.question);
 
@@ -432,7 +439,17 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
 
         {amInvolved && !alreadyAnswered && !showResult && myPowerups && (
           <div className="flex justify-center gap-2 flex-wrap">
-            <button data-testid="pu-skip" disabled={!myPowerups.skip} onClick={onSkip} className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-xs border border-white/10 disabled:opacity-30">
+            <button
+              data-testid="pu-skip"
+              disabled={!myPowerups.skip}
+              onClick={() => {
+                onSkip?.();
+                if (useVoiceInput) {
+                  startVoiceRecognition();
+                }
+              }}
+              className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-xs border border-white/10 disabled:opacity-30"
+            >
               🔄 تبديل ({myPowerups.skip})
             </button>
             <button data-testid="pu-time" disabled={!myPowerups.time} onClick={onTime} className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-xs border border-white/10 disabled:opacity-30">
