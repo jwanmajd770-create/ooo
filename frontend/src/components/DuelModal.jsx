@@ -19,6 +19,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceInterim, setVoiceInterim] = useState("");
   const [skipTimePenalty, setSkipTimePenalty] = useState(0);
+  const activeTurnStartRef = useRef(null);
+  const lastTurnRef = useRef(null);
   const recognitionRef = useRef(null);
   const voiceActiveRef = useRef(false);
   const duelRef = useRef(duel);
@@ -101,6 +103,16 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   useEffect(() => {
     duelRef.current = duel;
   }, [duel]);
+
+  useEffect(() => {
+    if (!duel || duel.resolved) return;
+    const nowSec = Date.now() / 1000;
+    if (lastTurnRef.current !== duel.turn) {
+      activeTurnStartRef.current = duel.turn_start_ts || nowSec;
+      lastTurnRef.current = duel.turn;
+      setSkipTimePenalty(0);
+    }
+  }, [duel?.turn, duel?.resolved]);
 
   useEffect(() => {
     onAnswerRef.current = onAnswer;
@@ -193,16 +205,18 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
         .map((word) => word.trim())
         .filter((word) => word.length > 2);
 
-      const isPartialMatch = answerWords.some((word) =>
-        transcriptWords.some((tWord) => {
-          const normalizedWord = normalizeArabic(word);
+      const normalizedTranscript = normalizeArabic(transcript);
+      const isPartialMatch = answerWords.some((word) => {
+        const normalizedWord = normalizeArabic(word);
+        const transcriptHasWord = transcriptWords.some((tWord) => {
           const normalizedTWord = normalizeArabic(tWord);
           const similarity = normalizedWord && normalizedTWord
             ? (1 - levenshtein(normalizedTWord, normalizedWord) / Math.max(normalizedTWord.length, normalizedWord.length))
             : 0;
           return similarity >= 0.6 || normalizedTWord.includes(normalizedWord);
-        })
-      );
+        });
+        return transcriptHasWord || normalizedTranscript.includes(normalizedWord);
+      });
 
       try { recognition.stop(); } catch (_) {}
       setVoiceListening(false);
@@ -290,7 +304,8 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const attStored = duel.attacker_stored_time ?? totalSec;
   const defStored = duel.defender_stored_time ?? totalSec;
   const introActive = countdown !== null;
-  const turnElapsed = introActive ? 0 : Math.max(0, nowSec - (duel.turn_start_ts || nowSec));
+  const stableTurnStart = activeTurnStartRef.current || duel.turn_start_ts || nowSec;
+  const turnElapsed = introActive ? 0 : Math.max(0, nowSec - stableTurnStart);
   const attRem = isTurnBased
     ? (duel.turn === "attacker" ? Math.max(0, attStored - turnElapsed - skipTimePenalty) : attStored)
     : totalSec;
