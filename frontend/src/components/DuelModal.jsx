@@ -18,6 +18,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const [voiceFeedback, setVoiceFeedback] = useState(null);
   const [voiceListening, setVoiceListening] = useState(false);
   const [voiceInterim, setVoiceInterim] = useState("");
+  const [skipTimePenalty, setSkipTimePenalty] = useState(0);
   const recognitionRef = useRef(null);
   const voiceActiveRef = useRef(false);
   const duelRef = useRef(duel);
@@ -175,22 +176,40 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
       const answerText = correctAnswerRef.current || "";
       console.error("🔥 COMPARING 🔥", { transcript, answerText });
 
-      const normalizedT = normalizeArabic(transcript);
-      const normalizedA = normalizeArabic(answerText);
-      const answerWords = normalizedA.split(/\s+/).filter((w) => w.length > 2);
-      const isPartialMatch = answerWords.some((word) => normalizedT.includes(word));
-      const contains = normalizedT.includes(normalizedA);
-      const similarity = normalizedA && normalizedT
-        ? (1 - levenshtein(normalizedT, normalizedA) / Math.max(normalizedT.length, normalizedA.length))
-        : 0;
-      const score = Math.round(similarity * 100);
+      const transcriptWords = (transcript || "")
+        .toString()
+        .normalize("NFKD")
+        .replace(/[\u064B-\u065F\u0670]/g, "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter(Boolean);
+      const answerWords = (answerText || "")
+        .toString()
+        .normalize("NFKD")
+        .replace(/[\u064B-\u065F\u0670]/g, "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .map((word) => word.trim())
+        .filter((word) => word.length > 2);
+
+      const isPartialMatch = answerWords.some((word) =>
+        transcriptWords.some((tWord) => {
+          const normalizedWord = normalizeArabic(word);
+          const normalizedTWord = normalizeArabic(tWord);
+          const similarity = normalizedWord && normalizedTWord
+            ? (1 - levenshtein(normalizedTWord, normalizedWord) / Math.max(normalizedTWord.length, normalizedWord.length))
+            : 0;
+          return similarity >= 0.6 || normalizedTWord.includes(normalizedWord);
+        })
+      );
 
       try { recognition.stop(); } catch (_) {}
       setVoiceListening(false);
       setVoiceActive(false);
       voiceActiveRef.current = false;
 
-      if (isPartialMatch || contains || score >= 80) {
+      if (isPartialMatch) {
         setVoiceFeedback("✅");
         onAnswerRef.current?.(duelRef.current?.question?.a);
       } else {
@@ -273,10 +292,10 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
   const introActive = countdown !== null;
   const turnElapsed = introActive ? 0 : Math.max(0, nowSec - (duel.turn_start_ts || nowSec));
   const attRem = isTurnBased
-    ? (duel.turn === "attacker" ? Math.max(0, attStored - turnElapsed) : attStored)
+    ? (duel.turn === "attacker" ? Math.max(0, attStored - turnElapsed - skipTimePenalty) : attStored)
     : totalSec;
   const defRem = isTurnBased
-    ? (duel.turn === "defender" ? Math.max(0, defStored - turnElapsed) : defStored)
+    ? (duel.turn === "defender" ? Math.max(0, defStored - turnElapsed - skipTimePenalty) : defStored)
     : totalSec;
   const danger = (isTurnBased ? (duel.turn === "attacker" ? attRem : defRem) : totalSec) <= 3 && !showResult;
   const introOverlayColor = typeof countdown === 'number' && !isSolo ? (countdown % 2 === 0 ? 'rgba(255, 0, 0, 0.32)' : 'rgba(0, 0, 255, 0.32)') : 'rgba(0, 0, 0, 0.95)';
@@ -447,9 +466,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
               disabled={!myPowerups.skip}
               onClick={() => {
                 onSkip?.();
-                if (useVoiceInput) {
-                  startVoiceRecognition();
-                }
+                setSkipTimePenalty((prev) => prev + 3);
               }}
               className="px-3 py-2 rounded-lg bg-white/5 hover:bg-white/15 text-xs border border-white/10 disabled:opacity-30"
             >
