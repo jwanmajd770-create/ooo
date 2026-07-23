@@ -284,7 +284,7 @@ export default function DuelModal({ duel, meId, players, onAnswer, onSkip, onTim
     duel &&
     ["flags_img", "players_img", "actors_img", "anime_img", "brands_img", "clubs_img", "apps_img", "landmarks_img"].includes(duel?.category) &&
     meId &&
-    meId === duel.attacker_id &&
+    (meId === duel.attacker_id || meId === duel.defender_id) &&
     !showResult
   );
 

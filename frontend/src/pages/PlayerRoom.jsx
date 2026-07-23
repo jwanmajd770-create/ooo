@@ -19,6 +19,7 @@ export default function PlayerRoom() {
   const { state, error, refreshState } = useGameState(code, token, 600);
   const [shieldMode, setShieldMode] = useState(false);
   const [eyeHint, setEyeHint] = useState(null);
+  const [voicePreference, setVoicePreference] = useState(false);
 
   const me = state?.me;
   const isDuelActive = !!state?.duel && !state?.duel?.resolved;
@@ -28,7 +29,7 @@ export default function PlayerRoom() {
   );
   const isCurrentDuelPlayer = isDuelActive && duelPlayers.includes(me?.id);
   const VOICE_CATEGORIES = ["flags_img", "players_img", "actors_img", "anime_img", "brands_img", "clubs_img", "apps_img", "landmarks_img"];
-  const voiceMode = Boolean(state?.duel && VOICE_CATEGORIES.includes(state?.duel?.category));
+  const voiceMode = Boolean(voicePreference && state?.duel && VOICE_CATEGORIES.includes(state?.duel?.category));
   const [isTalking, setIsTalking] = useState(false);
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
@@ -224,6 +225,16 @@ export default function PlayerRoom() {
                 </span>
               ))}
             </div>
+            <button
+              onClick={() => setVoicePreference((prev) => !prev)}
+              className={`mt-4 px-4 py-2 rounded-lg text-sm font-bold border ${
+                voicePreference
+                  ? "bg-cyan-400 text-black border-cyan-300"
+                  : "bg-white/5 text-white border-white/10"
+              }`}
+            >
+              {voicePreference ? "🎤 وضع الصوت: مفعّل" : "🎤 وضع الصوت: معطل"}
+            </button>
           </div>
         )}
 
