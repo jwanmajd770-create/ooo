@@ -27,7 +27,8 @@ export default function PlayerRoom() {
     [state?.duel?.attacker_id, state?.duel?.defender_id]
   );
   const isCurrentDuelPlayer = isDuelActive && duelPlayers.includes(me?.id);
-  const voiceMode = Boolean(state?.duel && state?.duel?.category === "flags_img" && isCurrentDuelPlayer);
+  const VOICE_CATEGORIES = ["flags_img", "players_img", "actors_img", "anime_img", "brands_img", "clubs_img", "apps_img", "landmarks_img"];
+  const voiceMode = Boolean(state?.duel && VOICE_CATEGORIES.includes(state?.duel?.category));
   const [isTalking, setIsTalking] = useState(false);
   const [agoraClient, setAgoraClient] = useState(null);
   const [agoraTrack, setAgoraTrack] = useState(null);
